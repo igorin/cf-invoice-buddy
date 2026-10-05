@@ -104,7 +104,7 @@ Keep the repository out of folders that iCloud Drive syncs, such as `~/Documents
 
 ### Staying inside the free tier
 
-The app runs on Cloudflare's free plan, where Workers AI allows 10,000 neurons a day for the whole account. Each agent instance has a daily budget in `wrangler.jsonc`; together they add up to 9,000, and a test fails if that total is raised past the allowance. A chat turn that goes in circles is stopped, and the smoke test will not run if it would take the account past 8,000 neurons for the day.
+The app runs on Cloudflare's free plan, where Workers AI allows 10,000 neurons a day for the whole account. Each agent instance has a daily budget in `wrangler.jsonc`; together they add up to 9,000, and a test fails if that total is raised past the allowance. A chat turn that goes in circles is stopped, and the smoke test, which makes one model turn per run, will not run if it would take the account past 8,000 neurons for the day.
 
 ## Deploying
 

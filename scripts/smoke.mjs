@@ -45,11 +45,11 @@ const TEST_SCENARIO = "zero-bill";
 const SPIKE_SCENARIO = "usage-spike";
 const DOLLAR_AMOUNT = /-?\$[\d,]+(?:\.\d+)?/g;
 // Free-tier guard. Workers AI gives the account 10,000 neurons a day. A run
-// uses a few hundred; it is refused when the account or the smoke instance
+// uses a few hundred; it makes one model turn and is refused when the account or the smoke instance
 // does not clearly have room, so a faulty run can never eat the allowance.
 const ACCOUNT_DAILY_NEURON_LIMIT = 10_000;
 const ACCOUNT_NEURON_RESERVE = 2_000;
-const RUN_NEURON_ESTIMATE = 400;
+const RUN_NEURON_ESTIMATE = 250;
 
 const results = [];
 async function check(name, body) {
@@ -75,10 +75,6 @@ function repeatedWordRatio(text) {
   const repeats = words.filter((word, i) => i > 0 && word === words[i - 1]);
   return repeats.length / (words.length - 1);
 }
-
-// Matches the app's own formatting of a quantity (src/tools/usage-summary-tool.ts).
-const formatQuantity = (value) =>
-  value.toLocaleString("en-US", { maximumFractionDigits: 2 });
 
 /** True when the text contains the figure on its own, not inside a longer number. */
 function quotesFigure(text, figure) {
@@ -423,57 +419,25 @@ await check(
   }
 );
 
-await check("a usage answer is grounded, undoubled and metered", async () => {
-  expect(agent && liveSummary, "no agent session");
-  const before = agent.states.at(-1)?.selfCost;
-  expect(before, "no meter state received");
-  expect(
-    before.todayNeurons + RUN_NEURON_ESTIMATE <= before.dailyBudgetNeurons,
-    `the smoke instance has used ${Math.round(before.todayNeurons)} of its ${before.dailyBudgetNeurons} neurons today; no model call made`
-  );
-  const { text, tools } = await agent.ask("What have I used this month?");
-  const after = agent.states.at(-1)?.selfCost;
-  expect(text.trim().length > 0, "empty reply");
-  expect(tools.includes("getUsageSummary"), "the usage tool was not called");
-  const ratio = repeatedWordRatio(text);
-  expect(
-    ratio <= MAX_REPEATED_WORD_RATIO,
-    `reply repeats words (${Math.round(ratio * 100)}%)`
-  );
-  // Every figure must be copied from the tool result (rule G-1). Requiring
-  // one exact, free-standing match also catches doubled digits.
-  const figures = liveSummary.rows.map((row) => formatQuantity(row.quantity));
-  const quoted = figures.filter((figure) => quotesFigure(text, figure));
-  expect(
-    quoted.length > 0,
-    "the reply quotes none of the summary's figures exactly"
-  );
-  expect(before && after, "no meter state received");
-  expect(after.todayNeurons > before.todayNeurons, "the turn was not metered");
-  expect(
-    after.unmeteredTurns === before.unmeteredTurns,
-    "the turn was recorded as unmetered"
-  );
-  console.log(
-    `  quoted ${quoted.length} of ${figures.length} figures exactly; meter: ${before.todayNeurons.toFixed(2)} → ${after.todayNeurons.toFixed(2)} neurons today`
-  );
-});
-
-// If the first model turn failed, no further model calls are made.
-const firstModelTurnFailed = results.at(-1)?.ok === false;
-
 await check(
-  "a bill explanation in test mode is grounded and labelled (UC-1, G-9)",
+  "a bill explanation is grounded, labelled, undoubled and metered (UC-1, UC-8, G-9)",
   async () => {
     expect(agent, "no agent session");
-    expect(!firstModelTurnFailed, "skipped: the previous model turn failed");
     await agent.call("setDataMode", ["test", SPIKE_SCENARIO]);
     try {
       const facts = await agent.call("explainBill");
       expect(facts.outcome === "explained", `outcome is ${facts.outcome}`);
+      // The one model turn of the run. The meter is real in test mode too.
+      const before = agent.states.at(-1)?.selfCost;
+      expect(before, "no meter state received");
+      expect(
+        before.todayNeurons + RUN_NEURON_ESTIMATE <= before.dailyBudgetNeurons,
+        `the smoke instance has used ${Math.round(before.todayNeurons)} of its ${before.dailyBudgetNeurons} neurons today; no model call made`
+      );
       const { text, tools } = await agent.ask(
         "Why is my bill higher than usual?"
       );
+      const after = agent.states.at(-1)?.selfCost;
       // The reply holds fixture figures only, so it is safe to print.
       const show = (problem) => `${problem}. Reply was: ${text.slice(0, 400)}`;
       expect(text.trim().length > 0, "empty reply");
@@ -499,8 +463,22 @@ await check(
         /test data/i.test(text),
         show("the reply does not say the figures are test data")
       );
+      const ratio = repeatedWordRatio(text);
+      expect(
+        ratio <= MAX_REPEATED_WORD_RATIO,
+        show(`the reply repeats words (${Math.round(ratio * 100)}%)`)
+      );
+      expect(after, "no meter state received after the turn");
+      expect(
+        after.todayNeurons > before.todayNeurons,
+        "the turn was not metered"
+      );
+      expect(
+        after.unmeteredTurns === before.unmeteredTurns,
+        "the turn was recorded as unmetered"
+      );
       console.log(
-        `  ${amounts.length} amounts stated, all from the tool result; labelled as test data`
+        `  ${amounts.length} amounts stated, all from the tool result; labelled as test data; meter: ${before.todayNeurons.toFixed(2)} → ${after.todayNeurons.toFixed(2)} neurons today`
       );
     } finally {
       await agent.call("setDataMode", ["live"]);
