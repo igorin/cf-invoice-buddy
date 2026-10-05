@@ -10,11 +10,13 @@ export const WORKER_NAMES = {
 
 /** Runs a command and returns its trimmed stdout. Throws on a non-zero exit. */
 export function run(command, args, options = {}) {
-  return execFileSync(command, args, {
+  const output = execFileSync(command, args, {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "inherit"],
     ...options
-  }).trim();
+  });
+  // With inherited stdio there is no captured output.
+  return (output ?? "").trim();
 }
 
 /** Reads KEY=VALUE lines from a file. Values are never logged by callers. */
