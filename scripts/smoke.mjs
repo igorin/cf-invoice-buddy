@@ -42,6 +42,7 @@ const FAILED_OUTCOMES = new Set([
 // duplication defect (spec B8) repeats nearly all of them.
 const MAX_REPEATED_WORD_RATIO = 0.2;
 const TEST_SCENARIO = "zero-bill";
+const SPIKE_SCENARIO = "usage-spike";
 
 const results = [];
 async function check(name, body) {
@@ -392,6 +393,44 @@ await check("a usage answer is grounded, undoubled and metered", async () => {
     `  quoted ${quoted.length} of ${figures.length} figures exactly; meter: ${before.todayNeurons.toFixed(2)} → ${after.todayNeurons.toFixed(2)} neurons today`
   );
 });
+
+await check(
+  "a bill explanation in test mode is grounded and labelled (UC-1, G-9)",
+  async () => {
+    expect(agent, "no agent session");
+    await agent.call("setDataMode", ["test", SPIKE_SCENARIO]);
+    try {
+      const facts = await agent.call("explainBill");
+      expect(facts.outcome === "explained", `outcome is ${facts.outcome}`);
+      const { text, tools } = await agent.ask(
+        "Why is my bill higher than usual?"
+      );
+      expect(text.trim().length > 0, "empty reply");
+      expect(
+        tools.includes("explainBillChange"),
+        "the explain tool was not called"
+      );
+      expect(
+        quotesFigure(text, facts.total),
+        `the reply does not quote the total ${facts.total}`
+      );
+      const impact = facts.findings[0].impact;
+      expect(
+        quotesFigure(text, impact),
+        `the reply does not quote the finding's ${impact}`
+      );
+      expect(
+        /test data/i.test(text),
+        "the reply does not say the figures are test data"
+      );
+      console.log(
+        `  quoted the total ${facts.total} and the finding ${impact}; labelled as test data`
+      );
+    } finally {
+      await agent.call("setDataMode", ["live"]);
+    }
+  }
+);
 
 agent?.close();
 

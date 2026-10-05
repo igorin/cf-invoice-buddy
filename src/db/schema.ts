@@ -83,6 +83,25 @@ export const MIGRATIONS: ReadonlyArray<{
         synced_at TEXT NOT NULL
       )`
     ]
+  },
+  {
+    // Which billing periods have been fetched, and issued invoices.
+    id: 4,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS usage_periods (
+        dataset TEXT NOT NULL,
+        period_start TEXT NOT NULL,
+        synced_at TEXT NOT NULL,
+        PRIMARY KEY (dataset, period_start)
+      )`,
+      `CREATE TABLE IF NOT EXISTS invoices (
+        dataset TEXT NOT NULL,
+        period_start TEXT NOT NULL,
+        period_end TEXT NOT NULL,
+        amount_micros INTEGER NOT NULL,
+        PRIMARY KEY (dataset, period_start)
+      )`
+    ]
   }
 ];
 

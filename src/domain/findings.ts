@@ -39,6 +39,8 @@ export type DetectorInput = Readonly<{
     Readonly<{ period: BillingPeriod; records: ReadonlyArray<UsageRecord> }>
   >;
   invoiceMicros: Micros | null;
+  /** Set to 1 when the owner chose the baseline month; defaults to 2. */
+  minBaselinePeriods?: number;
 }>;
 
 export type DetectorResult = Readonly<{

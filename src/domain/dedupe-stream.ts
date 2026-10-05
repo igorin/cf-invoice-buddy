@@ -2,8 +2,10 @@
  * Workaround for spec defect B8. With Llama 3.3, each streamed chunk from
  * Workers AI carries its text twice: in `response` and in
  * `choices[0].delta.content`. The provider emits both, so every word reaches
- * the client twice. This removes `response` from a chunk only when both
- * fields hold the same token, and is a no-op otherwise. Delete it once the
+ * the client twice. The same happens to streamed tool calls, which arrive
+ * in `tool_calls` and in `choices[0].delta.tool_calls`; joined, their
+ * arguments are invalid JSON. This removes the top-level copy only when the
+ * choices delta carries the same thing, and is a no-op otherwise. Delete it once the
  * provider or the stream is fixed.
  */
 
@@ -14,11 +16,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function readChoiceText(chunk: Record<string, unknown>): string | undefined {
-  const choices = chunk.choices;
-  if (!Array.isArray(choices)) return undefined;
-  const first: unknown = choices[0];
-  if (!isRecord(first) || !isRecord(first.delta)) return undefined;
-  const content = first.delta.content;
+  const content = firstChoiceDelta(chunk)?.content;
   return typeof content === "string" ? content : undefined;
 }
 
@@ -41,7 +39,23 @@ function repeatsChoiceText(
   return false;
 }
 
-/** Returns the chunk JSON without `response` when the choices delta repeats it. */
+function firstChoiceDelta(
+  chunk: Record<string, unknown>
+): Record<string, unknown> | undefined {
+  const choices = chunk.choices;
+  if (!Array.isArray(choices)) return undefined;
+  const first: unknown = choices[0];
+  return isRecord(first) && isRecord(first.delta) ? first.delta : undefined;
+}
+
+const isNonEmptyArray = (value: unknown): boolean =>
+  Array.isArray(value) && value.length > 0;
+
+/**
+ * Returns the chunk JSON without the top-level copies of what the choices
+ * delta already carries: `response` for a text token and `tool_calls` for a
+ * tool call. Anything else is returned unchanged.
+ */
 export function dropDuplicateText(payload: string): string {
   let chunk: unknown;
   try {
@@ -51,10 +65,17 @@ export function dropDuplicateText(payload: string): string {
   }
   if (!isRecord(chunk)) return payload;
 
-  if (!repeatsChoiceText(chunk.response, readChoiceText(chunk))) return payload;
+  const delta = firstChoiceDelta(chunk);
+  const repeatsText = repeatsChoiceText(chunk.response, readChoiceText(chunk));
+  const repeatsToolCall =
+    isNonEmptyArray(chunk.tool_calls) && isNonEmptyArray(delta?.tool_calls);
+  if (!repeatsText && !repeatsToolCall) return payload;
 
-  const { response: _duplicate, ...rest } = chunk;
-  return JSON.stringify(rest);
+  // A fresh copy, so the parsed chunk itself is not changed.
+  const result = { ...chunk };
+  if (repeatsText) delete result.response;
+  if (repeatsToolCall) delete result.tool_calls;
+  return JSON.stringify(result);
 }
 
 function rewriteLine(line: string): string {

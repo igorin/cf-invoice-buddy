@@ -368,7 +368,8 @@ function unexplained(
 export function runDetectors(input: DetectorInput): DetectorResult {
   const comparison = compareToBaseline(
     input.current,
-    input.baselines.map((b) => b.records)
+    input.baselines.map((b) => b.records),
+    input.minBaselinePeriods
   );
   const compared = comparison.comparable
     ? [

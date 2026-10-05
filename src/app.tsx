@@ -3,6 +3,7 @@ import { useAgent } from "agents/react";
 import { useAgentChat } from "@cloudflare/ai-chat/react";
 import { getToolName, isToolUIPart, type UIMessage } from "ai";
 import type { AgentState, InvoiceBuddyAgent } from "./agent";
+import { BreakdownCard, CostFooter } from "./components/breakdown-card";
 import {
   DataModeSwitch,
   TestModeBanner,
@@ -125,6 +126,15 @@ function ToolPartView({
 }) {
   if (!isToolUIPart(part)) return null;
   const toolName = getToolName(part);
+
+  // A bill explanation is shown as a breakdown card, not as raw tool output.
+  if (part.state === "output-available" && toolName === "explainBillChange") {
+    return (
+      <div className="flex justify-start">
+        <BreakdownCard output={part.output} />
+      </div>
+    );
+  }
 
   // Completed
   if (part.state === "output-available") {
@@ -466,7 +476,8 @@ function Chat({ accountId }: { accountId: string }) {
                 <div className="flex flex-wrap justify-center gap-2">
                   {[
                     "What have I used this month?",
-                    "How close am I to my free limits?"
+                    "Why is my bill higher than usual?",
+                    "What does this assistant cost me?"
                   ].map((prompt) => (
                     <Button
                       key={prompt}
@@ -714,6 +725,7 @@ function Chat({ accountId }: { accountId: string }) {
           </div>
         </form>
         <div className="flex justify-center pb-3">
+          <CostFooter cost={agentState?.selfCost} />
           <PoweredByCloudflare href="https://developers.cloudflare.com/agents/" />
         </div>
       </div>

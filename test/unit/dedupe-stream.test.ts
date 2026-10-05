@@ -133,6 +133,86 @@ describe("dropDuplicateText (B8)", () => {
   );
 });
 
+describe("dropDuplicateText for tool calls (B8)", () => {
+  // Chunk shapes captured from Workers AI on 2026-10-05. A streamed tool call
+  // arrives both in the choices delta and in a top-level field. Left alone,
+  // the provider joined both and the arguments became invalid JSON, so every
+  // tool call with arguments failed.
+  const name = {
+    choices: [
+      {
+        delta: {
+          tool_calls: [
+            {
+              function: { name: "explainBillChange" },
+              id: "call-1",
+              index: 0,
+              type: "function"
+            }
+          ]
+        }
+      }
+    ],
+    tool_calls: [{ name: "explainBillChange" }]
+  };
+  const args = (text: string, native: unknown) => ({
+    choices: [
+      { delta: { tool_calls: [{ function: { arguments: text }, index: 0 }] } }
+    ],
+    tool_calls: [{ arguments: native }]
+  });
+
+  it("removes the top-level copy of a tool call name", () => {
+    const result = JSON.parse(dropDuplicateText(JSON.stringify(name)));
+    expect(result).toEqual({ choices: name.choices });
+  });
+
+  it.each([
+    ['{"month": "', '{"month": "'],
+    ["202", 202],
+    ["-", "-"]
+  ])("removes the top-level copy of tool call arguments %j", (text, native) => {
+    const chunk = args(text, native);
+    expect(JSON.parse(dropDuplicateText(JSON.stringify(chunk)))).toEqual({
+      choices: chunk.choices
+    });
+  });
+
+  it("keeps a top-level tool call when the choices delta has none", () => {
+    const chunk = JSON.stringify({ tool_calls: [{ name: "getUsageSummary" }] });
+    expect(dropDuplicateText(chunk)).toBe(chunk);
+  });
+
+  it("keeps an empty top-level tool call list as it is", () => {
+    const chunk = JSON.stringify({
+      response: "",
+      choices: [{ delta: { content: "" } }],
+      tool_calls: []
+    });
+    expect(dropDuplicateText(chunk)).toBe(chunk);
+  });
+
+  it("removes a duplicated text token and a duplicated tool call in one chunk", () => {
+    const chunk = {
+      response: "ok",
+      choices: [
+        {
+          delta: {
+            content: "ok",
+            tool_calls: [{ function: { arguments: "{}" }, index: 0 }]
+          }
+        }
+      ],
+      tool_calls: [{ arguments: "{}" }],
+      usage: { prompt_tokens: 3 }
+    };
+    expect(JSON.parse(dropDuplicateText(JSON.stringify(chunk)))).toEqual({
+      choices: chunk.choices,
+      usage: { prompt_tokens: 3 }
+    });
+  });
+});
+
 describe("dedupeSseStream (B8)", () => {
   it("removes the duplicate from each event and keeps the stream format", async () => {
     const input = `data: ${both("Hello")}\n\ndata: ${both(" there")}\n\ndata: [DONE]\n\n`;

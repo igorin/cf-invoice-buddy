@@ -1,5 +1,5 @@
 import type { Plan } from "../domain/allowances";
-import { micros } from "../domain/money";
+import { micros, type Micros } from "../domain/money";
 import { isoDate, type IsoDate } from "../domain/periods";
 import type { UsageRecord } from "../domain/usage";
 import type { BillingState, SourceStatus } from "../domain/usage-summary";
@@ -169,8 +169,72 @@ export function clearDataset(sql: Sql, dataset: Dataset): void {
   for (const table of [
     "usage_records",
     "usage_source_status",
-    "account_billing"
+    "account_billing",
+    "usage_periods",
+    "invoices"
   ]) {
     sql.exec(`DELETE FROM ${table} WHERE dataset = ?`, dataset);
   }
+}
+
+/** Records that a billing period's usage has been fetched for a dataset. */
+export function markPeriodSynced(
+  sql: Sql,
+  dataset: Dataset,
+  periodStart: IsoDate,
+  at: string
+): void {
+  sql.exec(
+    "INSERT OR REPLACE INTO usage_periods (dataset, period_start, synced_at) VALUES (?, ?, ?)",
+    dataset,
+    periodStart,
+    at
+  );
+}
+
+export function isPeriodSynced(
+  sql: Sql,
+  dataset: Dataset,
+  periodStart: IsoDate
+): boolean {
+  const rows = sql.exec(
+    "SELECT 1 AS found FROM usage_periods WHERE dataset = ? AND period_start = ?",
+    dataset,
+    periodStart
+  );
+  return [...rows].length > 0;
+}
+
+export function saveInvoice(
+  sql: Sql,
+  dataset: Dataset,
+  invoice: Readonly<{
+    periodStart: IsoDate;
+    periodEnd: IsoDate;
+    amountMicros: Micros;
+  }>
+): void {
+  sql.exec(
+    `INSERT OR REPLACE INTO invoices (dataset, period_start, period_end, amount_micros)
+     VALUES (?, ?, ?, ?)`,
+    dataset,
+    invoice.periodStart,
+    invoice.periodEnd,
+    invoice.amountMicros
+  );
+}
+
+export function readInvoiceAmount(
+  sql: Sql,
+  dataset: Dataset,
+  periodStart: IsoDate
+): Micros | null {
+  const [row] = [
+    ...sql.exec(
+      "SELECT amount_micros FROM invoices WHERE dataset = ? AND period_start = ?",
+      dataset,
+      periodStart
+    )
+  ];
+  return row ? micros(Number(row.amount_micros)) : null;
 }
