@@ -19,6 +19,9 @@ const accessHeaders = {
 };
 const TURN_TIMEOUT_MS = 60_000;
 const VERSION_WAIT_MS = 90_000;
+const CONNECTION_FAILED = "WebSocket connection failed";
+const CONNECT_ATTEMPTS = 3;
+const CONNECT_RETRY_MS = 5_000;
 const VERSION_POLL_MS = 3_000;
 // A healthy reply almost never repeats a word back to back; the stream
 // duplication defect (spec B8) repeats nearly all of them.
@@ -64,7 +67,7 @@ function chatTurn(accountId) {
       socket.close();
       resolve({ text, before: states[0], after: states.at(-1) });
     };
-    socket.onerror = () => reject(new Error("WebSocket connection failed"));
+    socket.onerror = () => reject(new Error(CONNECTION_FAILED));
     socket.onopen = () =>
       socket.send(
         JSON.stringify({
@@ -114,6 +117,24 @@ function chatTurn(accountId) {
       }
     };
   });
+}
+
+// Seen in the clean-checkout drill: the first WebSocket connection after a
+// deploy can fail once. Only a failed connection is retried, never a reply
+// that fails its checks.
+async function chatTurnWithRetry(accountId) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await chatTurn(accountId);
+    } catch (error) {
+      const retryable = error.message === CONNECTION_FAILED;
+      if (!retryable || attempt === CONNECT_ATTEMPTS) throw error;
+      console.log(
+        `  connection failed, retrying (${attempt}/${CONNECT_ATTEMPTS})`
+      );
+      await new Promise((resolve) => setTimeout(resolve, CONNECT_RETRY_MS));
+    }
+  }
 }
 
 await check("a request with no credentials is refused", async () => {
@@ -180,7 +201,7 @@ await check("another account's agent instance is refused", async () => {
 
 await check("one chat turn completes, undoubled, and is metered", async () => {
   expect(accountId, "no session");
-  const { text, before, after } = await chatTurn(accountId);
+  const { text, before, after } = await chatTurnWithRetry(accountId);
   expect(text.trim().length > 0, "empty reply");
   const ratio = repeatedWordRatio(text);
   expect(
