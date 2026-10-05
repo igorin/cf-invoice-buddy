@@ -5,6 +5,10 @@ import { ENVIRONMENTS, WORKER_NAMES, currentPhase, fail, run } from "./lib.mjs";
 
 const [environment, ...flags] = process.argv.slice(2);
 const dryRun = flags.includes("--dry-run");
+// First deploy of an environment only: uploads the Worker so its hostname
+// exists for the Access application. The Worker must be configured to refuse
+// every request (placeholder ACCESS_AUD). No smoke test, record or tag.
+const bootstrap = flags.includes("--bootstrap");
 if (!ENVIRONMENTS.includes(environment)) {
   fail(
     `Usage: node scripts/deploy.mjs <${ENVIRONMENTS.join("|")}> [--dry-run]`
@@ -27,7 +31,7 @@ function guard() {
   if (!dryRun && !existsSync(secretsFile)) {
     fail(`Missing ${secretsFile}. See README, "Deploying".`);
   }
-  if (environment === "production") {
+  if (environment === "production" && !bootstrap) {
     const staged = run("git", [
       "tag",
       "--points-at",
@@ -70,6 +74,11 @@ run(
   ],
   inherit
 );
+
+if (bootstrap) {
+  console.log("✓ Bootstrap upload done. Not smoke tested, recorded or tagged.");
+  process.exit(0);
+}
 
 let smokePassed = true;
 try {
