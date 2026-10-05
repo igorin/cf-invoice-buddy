@@ -7,11 +7,11 @@ Specs are in [spec/](spec/).
 
 Last updated 2026-10-05. The build follows nine phases set out in [spec/low-level.md](spec/low-level.md), section 15. Each phase must be deployed to Cloudflare and pass a smoke test before the next begins.
 
-**Current phase: 1 of 9, deployed.** Phase 1 runs in staging and production behind Cloudflare Access, and both pass the smoke test. Two items remain before it is closed; see the gaps below.
+**Current phase: 1 of 9, deployed.** Phase 1 runs in staging and production behind Cloudflare Access, and both pass the smoke test.
 
 | Phase | Scope | Status |
 | --- | --- | --- |
-| 1 | Scaffold, authentication, the assistant's own cost meter and budget, deployment cycle | Deployed to staging and production; hardening drills passed; two gaps open |
+| 1 | Scaffold, authentication, the assistant's own cost meter and budget, deployment cycle | Deployed to staging and production; hardening drills passed |
 | 2 | Billing domain logic: money, periods, breakdowns, anomaly detectors | Not started |
 | 3 | Usage data, usage summary panel, test mode | Not started |
 | 4 | Bill explanations and the assistant's cost report | Not started |
@@ -21,27 +21,15 @@ Last updated 2026-10-05. The build follows nine phases set out in [spec/low-leve
 | 8 | Plan comparison | Not started |
 | 9 | Release | Not started |
 
-Progress against the use cases in [spec/high-level.md](spec/high-level.md):
-
-| Use case | Status |
-| --- | --- |
-| UC-1, UC-2 Explain a higher or lower bill | Not started |
-| UC-3, UC-4 Credit request drafts and history | Not started |
-| UC-6 Monthly invoice close | Not started |
-| UC-7 Compare plans | Not started |
-| UC-8 Cost of the assistant itself | Partly built: every chat turn is metered and a daily budget is enforced. The cost report, the on-screen meter and the share shown in bill explanations are not built. |
-| UC-9 Usage summary | Not started. The data source is proven: the account's real usage was read through the GraphQL Analytics API. |
-| UC-10 Test mode | Not started |
-
 What works today, in both deployed environments:
 
 - A chat agent on Llama 3.3 that answers over the starter chat UI. It has no data tools yet, so it declines to state any figure about the account.
 - Sign-in enforcement through Cloudflare Access tokens, and a lock so only the account's own agent instance can be reached.
 - The cost meter and daily budget.
 - 67 automated tests, format, lint, type check and build, run by CI on every pull request.
-- One-command deploys with a smoke test that sends a real chat turn. The record is in [spec/deployments.md](spec/deployments.md).
+- One-command deploys with a smoke test that sends a real chat turn and checks the Worker's logs. The record is in [spec/deployments.md](spec/deployments.md).
 
-Known gaps in phase 1: the smoke test does not yet check the Workers logs, and the automatic production rollback has not been exercised. Deploys run from a developer machine until a deploy token is added to GitHub.
+Deploys run from a developer machine until a deploy token is added to GitHub.
 
 
 ## Cloudflare API token for usage and billing data

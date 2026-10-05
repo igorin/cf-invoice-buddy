@@ -2,7 +2,8 @@
 // Usage: node scripts/smoke.mjs <staging|production> <expected commit sha>
 // Reads .secrets/smoke.env: SMOKE_URL_STAGING, SMOKE_URL_PRODUCTION,
 // CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET.
-import { ENVIRONMENTS, fail, readEnvFile } from "./lib.mjs";
+import { spawn } from "node:child_process";
+import { ENVIRONMENTS, WORKER_NAMES, fail, readEnvFile } from "./lib.mjs";
 
 const [environment, expectedSha] = process.argv.slice(2);
 if (!ENVIRONMENTS.includes(environment) || !expectedSha) {
@@ -19,6 +20,15 @@ const accessHeaders = {
 };
 const TURN_TIMEOUT_MS = 60_000;
 const VERSION_WAIT_MS = 90_000;
+// The live log stream takes several seconds to attach and to flush.
+const LOG_ATTACH_MS = 15_000;
+const LOG_FLUSH_MS = 8_000;
+const FAILED_OUTCOMES = new Set([
+  "exception",
+  "exceededCpu",
+  "exceededMemory",
+  "scriptNotFound"
+]);
 const CONNECTION_FAILED = "WebSocket connection failed";
 const CONNECT_ATTEMPTS = 3;
 const CONNECT_RETRY_MS = 5_000;
@@ -137,6 +147,64 @@ async function chatTurnWithRetry(accountId) {
   }
 }
 
+/** Splits a stream of concatenated, pretty-printed JSON objects. */
+function parseJsonStream(text) {
+  const objects = [];
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') inString = true;
+    else if (char === "{") {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (char === "}") {
+      depth--;
+      if (depth === 0 && start !== -1) {
+        try {
+          objects.push(JSON.parse(text.slice(start, i + 1)));
+        } catch {
+          // A partial object at the end of the stream is ignored.
+        }
+        start = -1;
+      }
+    }
+  }
+  return objects;
+}
+
+/**
+ * Follows the Worker's live logs for the duration of the smoke run.
+ * Log events contain request headers, so their content is never printed.
+ */
+async function followLogs() {
+  const tail = spawn(
+    "./node_modules/.bin/wrangler",
+    ["tail", WORKER_NAMES[environment], "--format", "json"],
+    { stdio: ["ignore", "pipe", "ignore"] }
+  );
+  let output = "";
+  tail.stdout.on("data", (chunk) => {
+    output += chunk;
+  });
+  await new Promise((resolve) => setTimeout(resolve, LOG_ATTACH_MS));
+  return async () => {
+    await new Promise((resolve) => setTimeout(resolve, LOG_FLUSH_MS));
+    tail.kill();
+    return parseJsonStream(output);
+  };
+}
+
+const stopLogs = await followLogs();
+
 await check("a request with no credentials is refused", async () => {
   const response = await fetch(`${baseUrl}/api/version`, {
     redirect: "manual"
@@ -217,6 +285,26 @@ await check("one chat turn completes, undoubled, and is metered", async () => {
   console.log(
     `  meter: ${before.todayNeurons.toFixed(2)} → ${after.todayNeurons.toFixed(2)} neurons today`
   );
+});
+
+await check("the Workers logs show no errors for this run", async () => {
+  const events = await stopLogs();
+  expect(events.length > 0, "no log events were captured");
+  const badOutcomes = events.filter((event) =>
+    FAILED_OUTCOMES.has(event.outcome)
+  );
+  const exceptions = events.flatMap((event) => event.exceptions ?? []);
+  const errorLogs = events
+    .flatMap((event) => event.logs ?? [])
+    .filter((log) => log.level === "error");
+  const maxCpuMs = Math.max(...events.map((event) => event.cpuTime ?? 0));
+  console.log(`  ${events.length} log events, peak CPU ${maxCpuMs} ms`);
+  expect(
+    badOutcomes.length === 0,
+    `${badOutcomes.length} failed invocation(s): ${[...new Set(badOutcomes.map((event) => event.outcome))].join(", ")}`
+  );
+  expect(exceptions.length === 0, `${exceptions.length} uncaught exception(s)`);
+  expect(errorLogs.length === 0, `${errorLogs.length} error-level log line(s)`);
 });
 
 const failed = results.filter((result) => !result.ok);
