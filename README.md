@@ -14,7 +14,7 @@ Last updated 2026-10-05. The build follows nine phases set out in [spec/low-leve
 | 1 | Scaffold, authentication, the assistant's own cost meter and budget, deployment cycle | Deployed to staging and production; hardening drills passed |
 | 2 | Billing domain logic: money, periods, breakdowns, anomaly detectors | Deployed. The logic is tested but not yet used by the agent |
 | 3 | Usage data, usage summary panel, test mode | Deployed |
-| 4 | Bill explanations and the assistant's cost report | Not started |
+| 4 | Bill explanations and the assistant's cost report | Code complete; deployment pending |
 | 5 | Documentation search and grounding checks | Not started |
 | 6 | Credit request drafts | Not started |
 | 7 | Monthly invoice close | Not started |

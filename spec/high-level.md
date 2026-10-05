@@ -42,7 +42,7 @@ Invoice Buddy is a chat agent for one Cloudflare account. It explains bill chang
 
 The owner asks, "Why is my bill $412 when it's usually $150?"
 
-1. The agent identifies the billing period in question and the baseline (the average of the three preceding closed periods unless the owner names one).
+1. The agent identifies the billing period in question and the baseline. The baseline is the month the owner names, fetched on demand. With no month named it is the average of up to three preceding periods already stored; with none stored there is no baseline and the agent asks which month to compare against.
 2. It shows the difference by product, largest change first, and by day for the products that moved most.
 3. It states the causes it found, each with the data that supports it. Causes follow the grounding rules in [section 4](#4-grounding-rules).
 
@@ -311,6 +311,7 @@ Each has the default this spec assumes. The low-level spec is written against th
 | 2026-10-04 | Attributing a spike to a specific Worker script is not in v1. |
 | 2026-10-04 | The assistant meters, reports and caps its own cost (UC-8). |
 | 2026-10-05 | v1 starts on the current $0 account. Bill explanations, the invoice close and plan comparison are proven on fixture data through test mode (UC-10) until the account has charges; they are re-checked on live data when it does. |
+| 2026-10-05 | The scheduled sync fetches the current billing period only. A bill explanation has a baseline when the owner names a month to compare against; the agent then fetches that month on demand and keeps it. With no month named, the baseline is whatever earlier periods are already stored, and if there are none the agent says a comparison needs a month to compare with. |
 | 2026-10-05 | Usage quantities come from the GraphQL Analytics API; costs and invoices come from the billing API. Tested on the real account. |
 | 2026-10-04 | A $0 account is a valid account. The usage summary is part of the interface and shows usage and billing per product regardless of the bill (UC-9). |
 | 2026-10-04 | Every phase is deployed to Cloudflare before the next begins; the deployment cycle is hardened during scaffolding (NFR-D1 to D7). |

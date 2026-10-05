@@ -2,7 +2,10 @@ import { micros, percentChange, type Micros } from "./money";
 import type { IsoDate } from "./periods";
 import type { UsageRecord } from "./usage";
 
-/** Fewer prior periods than this and no baseline is offered (spec section 5). */
+/**
+ * Fewer prior periods than this and no baseline is offered (spec section 5).
+ * A single month is enough only when the owner named it.
+ */
 export const MIN_BASELINE_PERIODS = 2;
 
 export type CostTotal = Readonly<{
@@ -90,10 +93,11 @@ export function dailyCost(
  */
 export function compareToBaseline(
   current: ReadonlyArray<UsageRecord>,
-  baselines: ReadonlyArray<ReadonlyArray<UsageRecord>>
+  baselines: ReadonlyArray<ReadonlyArray<UsageRecord>>,
+  minPeriods: number = MIN_BASELINE_PERIODS
 ): Comparison {
   const totalMicros = totalCost(current).costMicros;
-  if (baselines.length < MIN_BASELINE_PERIODS) {
+  if (baselines.length < minPeriods) {
     return { comparable: false, reason: "insufficient_history", totalMicros };
   }
 

@@ -5,17 +5,16 @@ import {
   pruneMessages,
   stepCountIs,
   streamText,
-  tool,
   type LanguageModel
 } from "ai";
 import { createWorkersAI } from "workers-ai-provider";
-import { z } from "zod";
 import { CloudflareBillingSource } from "./adapters/billing";
 import { GraphqlUsageSource } from "./adapters/graphql-usage";
 import { readConfig, type Config } from "./config";
 import { runMigrations } from "./db/schema";
 import {
-  clearDataset,
+  isPeriodSynced,
+  markPeriodSynced,
   readBilling,
   readSourceStatus,
   readUsage,
@@ -26,18 +25,26 @@ import {
 } from "./db/usage-store";
 import { ALLOWANCE_SOURCE, type Plan } from "./domain/allowances";
 import { withDedupedStream } from "./domain/dedupe-stream";
-import { isoDate, periodContaining, type IsoDate } from "./domain/periods";
 import {
-  SCENARIOS,
-  buildScenario,
-  isScenarioId,
-  type ScenarioId
-} from "./domain/scenarios";
+  addDays,
+  isoDate,
+  periodContaining,
+  type BillingPeriod,
+  type IsoDate
+} from "./domain/periods";
+import { SCENARIOS, type ScenarioId } from "./domain/scenarios";
 import { checkBudget, meterTurn } from "./domain/self-cost";
 import { buildUsageSummary, type UsageSummary } from "./domain/usage-summary";
 import type { BillingSource, UsageSource } from "./ports/sources";
-import { SYSTEM_PROMPT } from "./prompt";
-import { describeSummaryForModel } from "./tools/usage-summary-tool";
+import { buildSystemPrompt } from "./prompt";
+import { readCostReport, type CostReport } from "./db/self-usage-store";
+import {
+  explainStoredBill,
+  type ExplainRequest,
+  type ExplanationView
+} from "./services/explain-service";
+import { loadScenario } from "./services/scenario-service";
+import { buildTools } from "./tools";
 
 export const MODEL_ID = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 
@@ -134,13 +141,13 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
 
     const result = streamText({
       model: InvoiceBuddyAgent.modelFactory(this.env),
-      system: SYSTEM_PROMPT,
+      system: buildSystemPrompt(this.today()),
       messages: pruneMessages({
         messages: await convertToModelMessages(this.messages),
         toolCalls: "before-last-2-messages",
         reasoning: "before-last-message"
       }),
-      tools: this.tools(),
+      tools: buildTools(this),
       stopWhen: stepCountIs(MAX_STEPS_PER_TURN),
       abortSignal: options?.abortSignal,
       onFinish: ({ totalUsage, steps }) => {
@@ -153,36 +160,6 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
     });
 
     return result.toUIMessageStreamResponse();
-  }
-
-  private tools() {
-    return {
-      getUsageSummary: tool({
-        description:
-          "Get what the account has used this billing period, per product and metric, against included allowances, and what was billed. Use it for any question about usage or charges.",
-        inputSchema: z.object({}),
-        execute: async () =>
-          describeSummaryForModel(await this.getUsageSummary())
-      }),
-      setDataMode: tool({
-        description:
-          "Switch between the account's live data and test mode, which uses fixture data. Only call this when the owner asks to switch. The owner must confirm before it runs.",
-        inputSchema: z.object({
-          dataset: z.enum(["live", "test"]),
-          scenario: z.string().optional()
-        }),
-        needsApproval: true,
-        execute: async ({ dataset, scenario }) => {
-          if (dataset === "test" && !isScenarioId(scenario)) {
-            return { switched: false, chooseOneOf: SCENARIOS };
-          }
-          return {
-            switched: true,
-            mode: await this.setDataMode(dataset, scenario)
-          };
-        }
-      })
-    };
   }
 
   /** Pulls the current period's usage and billing status for the live dataset. */
@@ -206,6 +183,7 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
       .filter((s) => s.available)
       .map((s) => s.service);
     replaceUsage(sql, "live", readable, period.start, today, usage.records);
+    markPeriodSynced(sql, "live", period.start, at);
     saveSourceStatus(sql, "live", usage.sources, at);
     saveBilling(sql, "live", billing.billing, billing.plan, at);
     this.setState({ ...this.state, lastSyncAt: at });
@@ -252,7 +230,9 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
       throw new Error("Unknown data mode");
     }
     const mode: DataMode =
-      dataset === "live" ? { dataset } : this.loadScenario(scenario);
+      dataset === "live"
+        ? { dataset }
+        : loadScenario(this.ctx.storage.sql, scenario, this.today());
     this.sql`
       INSERT INTO audit_log (at, actor, action, subject_id, dataset)
       VALUES (${new Date().toISOString()}, 'owner', 'set_data_mode',
@@ -279,16 +259,59 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
     return mode;
   }
 
-  private loadScenario(scenario: unknown): DataMode {
-    if (!isScenarioId(scenario)) throw new Error("Unknown test scenario");
+  /** Explains a month's bill (UC-1, UC-2). See explain-service.ts. */
+  @callable()
+  async explainBill(request: ExplainRequest = {}): Promise<ExplanationView> {
+    const mode = this.state.dataMode;
     const today = this.today();
-    const data = buildScenario(scenario, today);
+    return explainStoredBill(request, {
+      sql: this.ctx.storage.sql,
+      dataset: mode.dataset,
+      scenario: mode.dataset === "test" ? mode.scenario : null,
+      today,
+      anchorDay: LIVE_ANCHOR_DAY,
+      ensurePeriod: (period) => this.ensurePeriod(mode.dataset, period, today)
+    });
+  }
+
+  /** What the assistant itself has cost (UC-8). Always real, in either mode. */
+  @callable()
+  getAssistantCost(): CostReport {
+    return readCostReport(
+      this.ctx.storage.sql,
+      this.today(),
+      this.neuronsToday(),
+      this.dailyBudget()
+    );
+  }
+
+  /** Makes sure a period's usage is stored, fetching a live month on demand. */
+  private async ensurePeriod(
+    dataset: Dataset,
+    period: BillingPeriod,
+    today: IsoDate
+  ): Promise<void> {
     const sql = this.ctx.storage.sql;
-    clearDataset(sql, "test");
-    const first = data.records.map((r) => r.date).sort()[0] ?? today;
-    replaceUsage(sql, "test", [], first, today, data.records);
-    saveBilling(sql, "test", data.billing, data.plan, new Date().toISOString());
-    return { dataset: "test", scenario };
+    if (dataset === "test" || isPeriodSynced(sql, dataset, period.start))
+      return;
+    if (period.end > today) {
+      await this.syncUsage();
+      return;
+    }
+    const result = readConfig(this.env);
+    if (!result.ok) return;
+    const last = addDays(period.end, -1);
+    const usage = await InvoiceBuddyAgent.usageSourceFactory(
+      result.config
+    ).fetchUsage(period.start, last);
+    const readable = usage.sources
+      .filter((s) => s.available)
+      .map((s) => s.service);
+    replaceUsage(sql, "live", readable, period.start, last, usage.records);
+    // A month with a failed product is fetched again next time it is asked for.
+    if (usage.sources.every((source) => source.available)) {
+      markPeriodSynced(sql, "live", period.start, new Date().toISOString());
+    }
   }
 
   private dailyBudget(): number {

@@ -586,6 +586,26 @@ Phase 3 built the usage data path, the usage summary (UC-9) and test mode (UC-10
 | Local development | Needs an Access sign-in or service token, because the model connection goes through the protected production hostname. | See the README. |
 | Coverage | Browser components are excluded from the Worker coverage run. | They are to be covered by the end-to-end tests in phase 9. Until then the panel and switch have no automated test. |
 
+### Phase 4 implementation notes (2026-10-05)
+
+Phase 4 built bill explanations (UC-1, UC-2) and the rest of the assistant's cost reporting (UC-8).
+
+| Topic | What was built | Note |
+| --- | --- | --- |
+| Baseline | Decided 2026-10-05: the scheduled sync stays on the current period. `explainBillChange` takes an optional `baselineMonth`; the agent fetches that month on demand, stores it and marks it fetched, so it is not fetched twice. With no month named, the baseline is up to three preceding months already stored. A single month counts as a baseline only when it was named. | A month in which any product failed to load is not marked fetched and is fetched again next time. |
+| Open period | A period still in progress is compared with the same number of days of each baseline month, and the result says so. | Comparing a part-month with whole months would always look like a drop. |
+| Explanation | `src/domain/explain.ts` returns one object used both by the model and by the breakdown card: total, baseline, per-product differences, daily costs of the three biggest movers, findings with evidence, the unexplained remainder and notes on data gaps. Every figure is text. | Limited to eight products and three daily series for the model's context. The model is given the movers' names; the daily series is for the card. |
+| Outcomes | `explained`, `none_found`, `no_baseline`, `no_charges`. Each carries a fixed instruction to the model, including the exact "I can't explain this difference from the account's data." wording. | |
+| Own share | On live data the explanation includes one sentence on the assistant's own metered model usage in the period. It is left out in test mode, so real and fixture figures are never mixed (G-9). | It is a statement beside the breakdown, not a split of the Workers AI row, because the account has no Workers AI cost to split. |
+| Cost report | `getAssistantCost`: month to date and the last seven days, with the three limit statements and the price source. The UI footer shows the month's metered cost and today's neurons against the budget. | Durable Object and Workflow activity is not estimated; the report says only model calls are metered. |
+| Tools not built | `getInvoiceSummary` and `getUsageBreakdown` from section 5. | Invoices are not read on live data yet, and the explanation already carries the per-product and per-day figures. Add them when a use for them appears. |
+| Tool input | The explain tool's schema is loose and non-month values are dropped with a note. | With a strict schema, a bad value made the model retry until the turn ended with no reply. |
+| Stream wrapper, third fix | Streamed tool calls arrive both in the choices delta and in a top-level `tool_calls` field. The provider joined both and the arguments became invalid JSON, so every tool call with arguments failed. The wrapper now removes the top-level copy. | Phase 3 did not hit this because its tools took no arguments. |
+| Prompt | Now built per turn with today's date and the current month. | Without a date the model invented months from 2023. |
+| Model behaviour seen live | In test mode, three of three answers to the spike question and three of three to the lower-bill question were correct and labelled as test data. Two weaknesses: the model passes a baseline month the owner did not name (the previous month), and it does not point out when the owner's quoted figures differ from the data. One earlier reply contained figures that were in no tool result. | The response checker and the evaluation suite that would catch these are phase 5. Until then the breakdown card is the reliable source on screen. |
+| Budget | The daily budget stopped a local test instance after failed tool-call loops used its 10,000 neurons. | The guard works; the loops are fixed by the two changes above. |
+| File size | Tool definitions, the explain orchestration, scenario loading and the cost report moved out of `agent.ts` into `src/tools/`, `src/services/` and `src/db/`. | Keeps every file under 400 lines. |
+
 ### Checked against ECC skills
 
 | Skill | Applied as |
