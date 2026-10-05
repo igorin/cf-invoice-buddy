@@ -147,3 +147,12 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Cloudflare local secrets and tool state
+.dev.vars
+.dev.vars.*
+.wrangler/
+.cloudflare/
+
+# macOS
+.DS_Store
