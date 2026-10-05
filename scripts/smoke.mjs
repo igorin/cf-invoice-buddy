@@ -173,6 +173,9 @@ await check("one chat turn completes, undoubled, and is metered", async () => {
     after.unmeteredTurns === before.unmeteredTurns,
     "the turn was recorded as unmetered"
   );
+  console.log(
+    `  meter: ${before.todayNeurons.toFixed(2)} → ${after.todayNeurons.toFixed(2)} neurons today`
+  );
 });
 
 const failed = results.filter((result) => !result.ok);
