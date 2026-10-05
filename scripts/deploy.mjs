@@ -16,10 +16,16 @@ if (!ENVIRONMENTS.includes(environment)) {
 }
 
 const secretsFile = `.secrets/${environment}.env`;
+const DEPLOYMENT_RECORD = "spec/deployments.md";
 const inherit = { stdio: "inherit" };
 
 function guard() {
-  if (run("git", ["status", "--porcelain"]) !== "") {
+  // The deployment record is appended between a staging and a production
+  // deploy of the same commit, so it alone may be modified.
+  const dirty = run("git", ["status", "--porcelain"])
+    .split("\n")
+    .filter((line) => line !== "" && !line.endsWith(DEPLOYMENT_RECORD));
+  if (dirty.length > 0) {
     fail("Working tree is not clean. Commit or stash first.");
   }
   run("git", ["fetch", "--quiet", "origin", "main"]);
@@ -110,7 +116,7 @@ if (!smokePassed) {
 const phase = currentPhase();
 const when = new Date().toISOString();
 appendFileSync(
-  "spec/deployments.md",
+  DEPLOYMENT_RECORD,
   `| ${phase} | ${when} | ${environment} | ${shortSha} | passed |\n`
 );
 
