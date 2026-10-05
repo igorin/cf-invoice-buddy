@@ -606,6 +606,14 @@ Phase 4 built bill explanations (UC-1, UC-2) and the rest of the assistant's cos
 | Budget | The daily budget stopped a local test instance after failed tool-call loops used its 10,000 neurons. | The guard works; the loops are fixed by the two changes above. |
 | File size | Tool definitions, the explain orchestration, scenario loading and the cost report moved out of `agent.ts` into `src/tools/`, `src/services/` and `src/db/`. | Keeps every file under 400 lines. |
 
+**Phase 4 deployment status (2026-10-05, 06:15 UTC).** Phase 4 is on staging. Production is on phase 3.
+
+- The first production deploy of phase 4 failed one smoke check: the model's reply to the test-mode bill question did not quote the total. The deploy script rolled production back to phase 3 by itself. The same check passed on staging four times before and after, so this was variation in the model's wording. The check now allows one retry and prints a failed reply.
+- The redeploy to staging then failed a different way: the `setDataMode` call timed out after 30 seconds. The cause is not known. A single chat turn against staging worked minutes later.
+- The account used 12,868 Workers AI neurons on 2026-10-05, above the free plan's 10,000 a day. Most went to local test runs in which tool calls failed and were retried up to the step limit, before the tool-call fix. Model calls were still being answered at 06:15 UTC, but the pricing page says operations fail once a free-plan limit is passed, so further smoke runs today are unreliable.
+- Staging's smoke instance has used about 1,470 of its 2,000-neuron daily budget; one more smoke run may exhaust it.
+- Not yet done for phase 4: a passing production deploy and the `deployed/phase-4` tag.
+
 ### Checked against ECC skills
 
 | Skill | Applied as |
