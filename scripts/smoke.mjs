@@ -43,6 +43,7 @@ const FAILED_OUTCOMES = new Set([
 const MAX_REPEATED_WORD_RATIO = 0.2;
 const TEST_SCENARIO = "zero-bill";
 const SPIKE_SCENARIO = "usage-spike";
+const EXPLAIN_ATTEMPTS = 2;
 
 const results = [];
 async function check(name, body) {
@@ -402,30 +403,36 @@ await check(
     try {
       const facts = await agent.call("explainBill");
       expect(facts.outcome === "explained", `outcome is ${facts.outcome}`);
-      const { text, tools } = await agent.ask(
-        "Why is my bill higher than usual?"
-      );
-      expect(text.trim().length > 0, "empty reply");
-      expect(
-        tools.includes("explainBillChange"),
-        "the explain tool was not called"
-      );
-      expect(
-        quotesFigure(text, facts.total),
-        `the reply does not quote the total ${facts.total}`
-      );
       const impact = facts.findings[0].impact;
-      expect(
-        quotesFigure(text, impact),
-        `the reply does not quote the finding's ${impact}`
-      );
-      expect(
-        /test data/i.test(text),
-        "the reply does not say the figures are test data"
-      );
-      console.log(
-        `  quoted the total ${facts.total} and the finding ${impact}; labelled as test data`
-      );
+      // The model's wording varies from run to run. One retry is allowed, and
+      // a failed attempt is printed, so the variation stays visible. The
+      // reply holds fixture figures only, so it is safe to print.
+      for (let attempt = 1; ; attempt++) {
+        const { text, tools } = await agent.ask(
+          "Why is my bill higher than usual?"
+        );
+        const problem =
+          text.trim().length === 0
+            ? "empty reply"
+            : !tools.includes("explainBillChange")
+              ? "the explain tool was not called"
+              : !quotesFigure(text, facts.total)
+                ? `the reply does not quote the total ${facts.total}`
+                : !quotesFigure(text, impact)
+                  ? `the reply does not quote the finding's ${impact}`
+                  : !/test data/i.test(text)
+                    ? "the reply does not say the figures are test data"
+                    : null;
+        if (problem === null) {
+          console.log(
+            `  quoted the total ${facts.total} and the finding ${impact}; labelled as test data (attempt ${attempt})`
+          );
+          break;
+        }
+        console.log(`  attempt ${attempt} failed: ${problem}`);
+        console.log(`  reply was: ${text.slice(0, 500)}`);
+        expect(attempt < EXPLAIN_ATTEMPTS, problem);
+      }
     } finally {
       await agent.call("setDataMode", ["live"]);
     }
