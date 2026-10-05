@@ -31,10 +31,10 @@ Invoice Buddy is a chat agent for one Cloudflare account. It explains bill chang
 **Out of scope for v1**
 
 - Changing the account: no plan changes, no payments, no configuration fixes.
-- Submitting credit requests or receiving decisions on them. The owner submits; see [section 10](#10-future-backlog).
+- Submitting credit requests or receiving decisions on them. The owner submits; see [section 10](#11-future-backlog).
 - Multiple users or roles per account.
 - Enterprise contract billing. The usage API the agent relies on covers pay-as-you-go charges only.
-- General web search. Documentation lookup is limited to Cloudflare's own documentation (see [Q1](#9-open-questions)).
+- General web search. Documentation lookup is limited to Cloudflare's own documentation (see [Q1](#10-open-questions)).
 
 ## 3. Use cases
 
@@ -73,7 +73,7 @@ The agent cannot see what happened after the owner submitted a request. The owne
 
 ### UC-5 Credit decision (moved to backlog)
 
-Showing Cloudflare's decision in chat without the owner asking needs a submission channel that v1 does not have. See [section 10](#10-future-backlog). The ID is retained so references stay valid.
+Showing Cloudflare's decision in chat without the owner asking needs a submission channel that v1 does not have. See [section 10](#11-future-backlog). The ID is retained so references stay valid.
 
 ### UC-6 Monthly invoice close
 
@@ -89,7 +89,7 @@ The close workflow runs for one billing period in five steps:
 
 ### UC-7 Compare plans
 
-The owner asks whether another plan would be cheaper. The agent computes what the period's actual usage would have cost on each candidate plan from a versioned price table and shows the difference. Prices carry their source and effective date. The scope of the price table is [Q2](#9-open-questions).
+The owner asks whether another plan would be cheaper. The agent computes what the period's actual usage would have cost on each candidate plan from a versioned price table and shows the difference. Prices carry their source and effective date. The scope of the price table is [Q2](#10-open-questions).
 
 ### UC-8 Cost of the assistant itself
 
@@ -210,7 +210,7 @@ Drafting a credit request is a short, deterministic task with no waiting, so it 
 
 | Dependency | Verified fact | Consequence |
 | --- | --- | --- |
-| Billable usage API (`GET /accounts/{id}/billable-usage`) | Alpha. Pay-as-you-go only. Returns cost and quantity per service per charge period, with optional zone. | It is the usage source, behind an interface, with a fixture source for development and tests. It has no per-Worker-script breakdown ([section 10](#10-future-backlog)). |
+| Billable usage API (`GET /accounts/{id}/billable-usage`) | Alpha. Pay-as-you-go only. Returns cost and quantity per service per charge period, with optional zone. | It is the usage source, behind an interface, with a fixture source for development and tests. It has no per-Worker-script breakdown ([section 10](#11-future-backlog)). |
 | Usage API v2 (`GET /accounts/{id}/billable/usage`) | Alpha and restricted. One record per billable metric per day, including usage inside free allowances and at zero cost. Its cost fields are not yet populated. The current login gets 403. | Not used in v1. Access is granted by Cloudflare, and a token with Billing Read still gets 403. |
 | GraphQL Analytics API | Tested on this account with an Account Analytics read token. It returned real daily Workers AI usage (requests, tokens, neurons) on a $0 account, and exposes daily datasets for Workers, Durable Objects and Workflows. It carries quantities, not costs. | The source for UC-9 quantities and for daily series. |
 | Billing history API (`GET /accounts/{id}/billing/history`) | Returns invoice items with amount and currency. | Source of issued invoices. |
@@ -267,7 +267,30 @@ Drafting a credit request is a short, deterministic task with no waiting, so it 
 | NFR-D6 | Schema changes are additive and work with the previous code version, so a rollback never meets a schema it cannot read. |
 | NFR-D7 | Each deployment is recorded in the repo: phase, date, commit, version, smoke result. |
 
-## 9. Open questions
+## 9. Exercise criteria
+
+The project is built for an exercise with the criteria below. This section maps each one to the spec and was last checked on 2026-10-05.
+
+| Criterion | How the spec meets it | State |
+| --- | --- | --- |
+| An LLM; Llama 3.3 on Workers AI is recommended | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` on Workers AI, for every chat turn and tool call. | Built and deployed. |
+| Workflow or coordination; Workflows, Workers or Durable Objects are recommended | A Durable Object per account coordinates the chat, tools, state and schedules. A Cloudflare Workflow runs the invoice close with a durable approval gate (UC-6). A Worker routes and authenticates. | The Durable Object and Worker are built and deployed. The Workflow arrives in phase 7. |
+| User input by chat or voice; Pages or Realtime are recommended | A chat interface over WebSocket, from the official agents starter. It is served as static assets of the same Worker, not from Pages. There is no voice input. | Built and deployed. |
+| Memory or state | The Durable Object's SQLite holds chat history, the cost meter, and later usage, invoices, credit drafts and closes. Agent state is synced to the browser. | Chat history and the meter are built and deployed. The rest follows by phase. |
+| AI-assisted coding is allowed, but the prompt history must be submitted | Not yet covered. See NFR-P1. | Open. |
+
+Two points to keep in view:
+
+- If the exercise is submitted before phase 7, the Workflow is not yet in the product. The coordination criterion is still met by the Durable Object and Worker, which the criterion names as alternatives.
+- The chat is not hosted on Pages. The criterion recommends Pages but does not require it.
+
+### Prompt history
+
+| ID | Requirement |
+| --- | --- |
+| NFR-P1 | The prompts given to the AI coding assistant are kept in the repository in a single file, in order, and brought up to date at the end of each phase. They contain no secrets or account identifiers. |
+
+## 10. Open questions
 
 Each has the default this spec assumes. The low-level spec is written against the defaults.
 
@@ -292,7 +315,7 @@ Each has the default this spec assumes. The low-level spec is written against th
 | 2026-10-04 | A $0 account is a valid account. The usage summary is part of the interface and shows usage and billing per product regardless of the bill (UC-9). |
 | 2026-10-04 | Every phase is deployed to Cloudflare before the next begins; the deployment cycle is hardened during scaffolding (NFR-D1 to D7). |
 
-## 10. Future backlog
+## 11. Future backlog
 
 Not in v1. Each item names what it would need.
 
