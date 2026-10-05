@@ -10,6 +10,7 @@ const config: Config = {
   CF_ACCOUNT_ID: "0".repeat(32),
   CF_API_TOKEN: "test-token-not-a-real-credential",
   DAILY_NEURON_BUDGET: 10_000,
+  SMOKE_DAILY_NEURON_BUDGET: 1_000,
   ENVIRONMENT: "production",
   ACCESS_TEAM_DOMAIN: TEAM,
   ACCESS_AUD: AUD,

@@ -606,13 +606,34 @@ Phase 4 built bill explanations (UC-1, UC-2) and the rest of the assistant's cos
 | Budget | The daily budget stopped a local test instance after failed tool-call loops used its 10,000 neurons. | The guard works; the loops are fixed by the two changes above. |
 | File size | Tool definitions, the explain orchestration, scenario loading and the cost report moved out of `agent.ts` into `src/tools/`, `src/services/` and `src/db/`. | Keeps every file under 400 lines. |
 
-**Phase 4 deployment status (2026-10-05, 06:15 UTC).** Phase 4 is on staging. Production is on phase 3.
+**Phase 4 deployment status (2026-10-05).** Phase 4 is on staging. Production is on phase 3 after an automatic rollback. The production deploy is to be retried after the neuron allowance resets at 00:00 UTC.
 
-- The first production deploy of phase 4 failed one smoke check: the model's reply to the test-mode bill question did not quote the total. The deploy script rolled production back to phase 3 by itself. The same check passed on staging four times before and after, so this was variation in the model's wording. The check now allows one retry and prints a failed reply.
-- The redeploy to staging then failed a different way: the `setDataMode` call timed out after 30 seconds. The cause is not known. A single chat turn against staging worked minutes later.
-- The account used 12,868 Workers AI neurons on 2026-10-05, above the free plan's 10,000 a day. Most went to local test runs in which tool calls failed and were retried up to the step limit, before the tool-call fix. Model calls were still being answered at 06:15 UTC, but the pricing page says operations fail once a free-plan limit is passed, so further smoke runs today are unreliable.
-- Staging's smoke instance has used about 1,470 of its 2,000-neuron daily budget; one more smoke run may exhaust it.
-- Not yet done for phase 4: a passing production deploy and the `deployed/phase-4` tag.
+### Failure investigation and free-tier guards (2026-10-05)
+
+**What went wrong**
+
+| Event | Cause, as far as established | Fix |
+| --- | --- | --- |
+| The account used 12,939 neurons in a day against the free 10,000. | Local test runs while streamed tool calls were broken: every call failed, and the model retried to the eight-step limit, eight model calls a turn with a growing context. Each agent instance also had its own budget of up to 10,000, so the budgets did not add up to the account's allowance. | Loop guard, lower step limit and budgets that fit the allowance, below. |
+| Production deploy of phase 4 failed one smoke check and was rolled back. | The check required the reply to restate the bill total. The stored reply was correct and fully grounded but gave the difference and the cause, not the total. The check was too strict. | The check now requires that every dollar amount in the reply is one the tool returned, and requires none in particular. |
+| On staging, a `setDataMode` call timed out after 30 seconds. | Not established. It could not be reproduced: six mode switches in a row took 41 to 78 ms with 2 to 13 ms of CPU. It happened straight after a model turn, at 04:55 UTC, when the account was near or past its daily allowance, so a model stream that never finished is the leading suspicion. It did not coincide with the six-hourly sync. | A stalled-stream timeout, below, so a hung model call cannot hold the agent. Open until seen again. |
+| The smoke instance's conversation had grown to 42 messages. | Every run added its questions and answers, so each run sent the model a longer context and cost more. | The smoke test clears that instance's history at the start of each run. |
+
+**Guards now in place (NFR-O4 to O6)**
+
+| Guard | Where | Behaviour |
+| --- | --- | --- |
+| Loop detection | `src/domain/loop-guard.ts`, used as a `stopWhen` condition | Stops a turn after two consecutive steps with a failed tool call, or when the same tool call with the same input is made a third time. A test replays the 2026-10-05 failure and sees two model calls, not eight. |
+| Step limit | `src/agent.ts` | Five model steps a turn, down from eight. |
+| Stalled stream | `chatStreamStallTimeoutMs` | A model stream silent for 45 seconds is aborted. |
+| Empty reply | `onChatResponse` | A turn that ends with no text and no approval prompt gets the fixed line "I couldn't complete that answer. Please try asking again, or rephrase the question." |
+| Budgets | `wrangler.jsonc` | Per instance, per day: production owner 5,000 and smoke 600; staging owner 400 and smoke 1,000; local owner 1,000 and smoke 1,000. Total 9,000. `test/unit/free-tier.test.ts` fails if the total passes 9,000. |
+| Smoke pre-flight | `scripts/smoke.mjs`, run by `scripts/deploy.mjs` before uploading | Reads the account's neurons for the day from GraphQL Analytics and refuses to run past 8,000. Refuses if the figure cannot be read. Also checks the smoke instance's own budget before the first model call. |
+| Fail fast | `scripts/smoke.mjs` | If the first model turn fails, the second is not attempted. |
+
+These budgets guarantee the allowance only for what the app itself spends. Model calls made outside it, such as from the `cf` command line, are not counted by any budget, which is why 1,000 neurons are left unallocated and the pre-flight check reads the account-wide figure.
+
+**Duplicate files.** On 2026-10-05 the working tree, `.git` and `node_modules` filled with copies named like `explain 2.ts`: nine in the source tree, hundreds in `dist`, 7,854 in `node_modules`, and stray `index 2` and `refs/heads/main 2` files inside `.git` that made `git rev-list --all` fail. Six were committed by `git add -A` and broke CI. The cause is iCloud Drive: the Mac has "Desktop & Documents Folders" turned on, the repository is under `~/Documents`, the folder carries the iCloud file-provider markers and no other sync tool is running. iCloud writes a numbered copy when it sees a conflicting change, which a reinstall or a build produces by the thousand. All copies were deleted and `.gitignore` now ignores names ending in a space and a number, which also covers copies of ignored secret files such as `.dev 2.vars`. This will recur while the repository is in a synced folder.
 
 ### Checked against ECC skills
 

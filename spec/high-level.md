@@ -254,6 +254,9 @@ Drafting a credit request is a short, deterministic task with no waiting, so it 
 | NFR-O1 | Workflow steps are idempotent. A retried step does not write a second snapshot or close a period twice. |
 | NFR-O2 | The first token of a chat answer streams within 5 seconds at the median (target, measured in the evaluation run). |
 | NFR-O3 | The daily neuron budget (UC-8) is enforced in code before each model call. |
+| NFR-O4 | The project stays inside Cloudflare's free tier. The binding limit is Workers AI: 10,000 neurons a day for the whole account. The daily budgets of every agent instance in every environment add up to no more than 9,000, enforced by a test. |
+| NFR-O5 | A chat turn that is going in circles is detected and stopped: two failed tool calls in a row, or the same call made a third time. A turn is at most five model steps. A turn that ends with nothing to show gets a fixed message. |
+| NFR-O6 | The smoke test checks the account's neuron usage before it makes any model call, and the deploy script runs that check before it uploads. A run that would take the account past 8,000 neurons for the day is refused. |
 
 ### Deployment
 
@@ -311,6 +314,7 @@ Each has the default this spec assumes. The low-level spec is written against th
 | 2026-10-04 | Attributing a spike to a specific Worker script is not in v1. |
 | 2026-10-04 | The assistant meters, reports and caps its own cost (UC-8). |
 | 2026-10-05 | v1 starts on the current $0 account. Bill explanations, the invoice close and plan comparison are proven on fixture data through test mode (UC-10) until the account has charges; they are re-checked on live data when it does. |
+| 2026-10-05 | The project must stay within Cloudflare's free tier limits (NFR-O4 to O6). Workers Paid is not an option for this project. |
 | 2026-10-05 | The scheduled sync fetches the current billing period only. A bill explanation has a baseline when the owner names a month to compare against; the agent then fetches that month on demand and keeps it. With no month named, the baseline is whatever earlier periods are already stored, and if there are none the agent says a comparison needs a month to compare with. |
 | 2026-10-05 | Usage quantities come from the GraphQL Analytics API; costs and invoices come from the billing API. Tested on the real account. |
 | 2026-10-04 | A $0 account is a valid account. The usage summary is part of the interface and shows usage and billing per product regardless of the bill (UC-9). |

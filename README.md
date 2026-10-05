@@ -100,6 +100,12 @@ npm run test:coverage  # unit and integration tests with coverage thresholds
 
 Local development reaches the real model through the production Worker's hostname, which Cloudflare Access protects. Run `npm run dev` in a terminal and sign in when the browser prompt appears, or set `CLOUDFLARE_ACCESS_CLIENT_ID` and `CLOUDFLARE_ACCESS_CLIENT_SECRET` to an Access service token for non-interactive use.
 
+Keep the repository out of folders that iCloud Drive syncs, such as `~/Documents` or the Desktop when "Desktop & Documents Folders" is on. iCloud makes numbered conflict copies (`file 2.ts`) of files that change quickly, including inside `.git` and `node_modules`. `.gitignore` ignores such copies, but they still break local type checks and can corrupt the repository's refs.
+
+### Staying inside the free tier
+
+The app runs on Cloudflare's free plan, where Workers AI allows 10,000 neurons a day for the whole account. Each agent instance has a daily budget in `wrangler.jsonc`; together they add up to 9,000, and a test fails if that total is raised past the allowance. A chat turn that goes in circles is stopped, and the smoke test will not run if it would take the account past 8,000 neurons for the day.
+
 ## Deploying
 
 There are two environments, `staging` and `production`. Both are deployed by one script, which builds, deploys, runs a smoke test against the live URL and records the result. It refuses a working tree with uncommitted changes and a commit that is not on `origin/main`. Production also requires that the same commit has passed staging.

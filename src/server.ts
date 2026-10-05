@@ -1,4 +1,5 @@
 import { routeAgentRequest } from "agents";
+import { SMOKE_SUFFIX } from "./agent";
 import { authenticate } from "./auth";
 import { readConfig, type Config } from "./config";
 
@@ -18,7 +19,6 @@ function versionResponse(config: Config): Response {
 
 // The smoke test talks to its own instance, so it never writes into the
 // owner's conversation. It reads the same account and needs the same sign-in.
-const SMOKE_SUFFIX = "-smoke";
 
 /** Only the account's own agent instances may be addressed (NFR-S1). */
 function isForeignAgent(url: URL, config: Config): boolean {

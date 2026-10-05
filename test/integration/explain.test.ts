@@ -266,7 +266,7 @@ describe("getAssistantCost (UC-8)", () => {
     });
     expect(report.today).toEqual({
       neurons: "15.5",
-      dailyBudget: "10,000 neurons"
+      dailyBudget: "1,000 neurons"
     });
     expect(report.lastDays).toHaveLength(1);
     expect(report.limits).toHaveLength(3);
