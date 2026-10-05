@@ -35,6 +35,21 @@ export const MIGRATIONS: ReadonlyArray<{
         refused_turns INTEGER NOT NULL DEFAULT 0
       )`
     ]
+  },
+  {
+    // Append-only record of approvals, drafts and mode changes (NFR-S5).
+    id: 2,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS audit_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        at TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        action TEXT NOT NULL,
+        subject_id TEXT,
+        dataset TEXT NOT NULL DEFAULT 'live',
+        detail_json TEXT
+      )`
+    ]
   }
 ];
 
