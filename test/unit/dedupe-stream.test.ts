@@ -29,6 +29,53 @@ describe("dropDuplicateText (B8)", () => {
     expect(result).toEqual({ choices: [{ delta: { content: "Hello" } }] });
   });
 
+  // Seen live on 2026-10-05: Workers AI sends a numeric token as a JSON
+  // number in `response` and as a string in the choices delta. Left alone,
+  // every digit group in a reply was doubled ("311" became "311311").
+  it.each([
+    [2, "2"],
+    [39, "39"],
+    [0, "0"],
+    [311, " 311"],
+    [1.5, "1.50"],
+    [-4, "-4"]
+  ])(
+    "removes a numeric response %s when the delta is %j",
+    (response, content) => {
+      const chunk = JSON.stringify({
+        response,
+        choices: [{ delta: { content } }]
+      });
+      expect(JSON.parse(dropDuplicateText(chunk))).toEqual({
+        choices: [{ delta: { content } }]
+      });
+    }
+  );
+
+  it("keeps a numeric response when the delta is a different number", () => {
+    const chunk = JSON.stringify({
+      response: 7,
+      choices: [{ delta: { content: "8" } }]
+    });
+    expect(dropDuplicateText(chunk)).toBe(chunk);
+  });
+
+  it("keeps a numeric response when the delta is not a number", () => {
+    const chunk = JSON.stringify({
+      response: 7,
+      choices: [{ delta: { content: "seven" } }]
+    });
+    expect(dropDuplicateText(chunk)).toBe(chunk);
+  });
+
+  it("keeps a numeric response when the delta is blank", () => {
+    const chunk = JSON.stringify({
+      response: 0,
+      choices: [{ delta: { content: " " } }]
+    });
+    expect(dropDuplicateText(chunk)).toBe(chunk);
+  });
+
   it("keeps a chunk that has only the response field", () => {
     const chunk = JSON.stringify({ response: "Hello" });
     expect(dropDuplicateText(chunk)).toBe(chunk);

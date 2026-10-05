@@ -16,10 +16,16 @@ function versionResponse(config: Config): Response {
   });
 }
 
-/** Only the account's own agent instance may be addressed (NFR-S1). */
+// The smoke test talks to its own instance, so it never writes into the
+// owner's conversation. It reads the same account and needs the same sign-in.
+const SMOKE_SUFFIX = "-smoke";
+
+/** Only the account's own agent instances may be addressed (NFR-S1). */
 function isForeignAgent(url: URL, config: Config): boolean {
   const name = AGENT_PATH.exec(url.pathname)?.[1];
-  return name !== undefined && name !== config.CF_ACCOUNT_ID;
+  if (name === undefined) return false;
+  const allowed = [config.CF_ACCOUNT_ID, config.CF_ACCOUNT_ID + SMOKE_SUFFIX];
+  return !allowed.includes(name);
 }
 
 export default {

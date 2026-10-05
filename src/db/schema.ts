@@ -50,6 +50,39 @@ export const MIGRATIONS: ReadonlyArray<{
         detail_json TEXT
       )`
     ]
+  },
+  {
+    // Usage, per-product source status and billing status, per dataset.
+    id: 3,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS usage_records (
+        dataset TEXT NOT NULL,
+        date TEXT NOT NULL,
+        service TEXT NOT NULL,
+        metric TEXT NOT NULL,
+        zone TEXT NOT NULL DEFAULT '',
+        quantity REAL NOT NULL,
+        unit TEXT NOT NULL,
+        billable_quantity REAL,
+        cost_micros INTEGER,
+        PRIMARY KEY (dataset, date, service, metric, zone)
+      )`,
+      `CREATE TABLE IF NOT EXISTS usage_source_status (
+        dataset TEXT NOT NULL,
+        service TEXT NOT NULL,
+        available INTEGER NOT NULL,
+        reason TEXT,
+        checked_at TEXT NOT NULL,
+        PRIMARY KEY (dataset, service)
+      )`,
+      `CREATE TABLE IF NOT EXISTS account_billing (
+        dataset TEXT PRIMARY KEY,
+        status TEXT NOT NULL,
+        reason TEXT,
+        plan TEXT NOT NULL,
+        synced_at TEXT NOT NULL
+      )`
+    ]
   }
 ];
 
