@@ -18,6 +18,8 @@ const accessHeaders = {
   "CF-Access-Client-Secret": secrets.CF_ACCESS_CLIENT_SECRET
 };
 const TURN_TIMEOUT_MS = 60_000;
+const VERSION_WAIT_MS = 90_000;
+const VERSION_POLL_MS = 3_000;
 // A healthy reply almost never repeats a word back to back; the stream
 // duplication defect (spec B8) repeats nearly all of them.
 const MAX_REPEATED_WORD_RATIO = 0.2;
@@ -121,12 +123,30 @@ await check("a request with no credentials is refused", async () => {
   expect(response.status !== 200, `got HTTP ${response.status}`);
 });
 
+// A new version takes a few seconds to reach every location. Seen in the
+// rollback drill: a deploy straight after a rollback still served the old
+// commit for a moment. Wait for the intended commit before judging it.
+async function waitForVersion() {
+  const deadline = Date.now() + VERSION_WAIT_MS;
+  let last = { status: 0, version: {} };
+  while (Date.now() < deadline) {
+    const response = await fetch(`${baseUrl}/api/version`, {
+      headers: accessHeaders
+    });
+    const version = await response.json().catch(() => ({}));
+    last = { status: response.status, version };
+    if (response.status === 200 && version.commit === expectedSha) break;
+    await new Promise((resolve) => setTimeout(resolve, VERSION_POLL_MS));
+  }
+  return last;
+}
+
 await check("the deployed version is the intended commit", async () => {
-  const response = await fetch(`${baseUrl}/api/version`, {
-    headers: accessHeaders
-  });
-  expect(response.status === 200, `got HTTP ${response.status}`);
-  const version = await response.json();
+  const { status, version } = await waitForVersion();
+  expect(
+    status === 200,
+    `got HTTP ${status}${version.invalid ? `, invalid: ${version.invalid.join(", ")}` : ""}`
+  );
   expect(version.configOk === true, "configuration is incomplete");
   expect(
     version.environment === environment,
