@@ -159,3 +159,7 @@ vite.config.ts.timestamp-*
 
 # Deployment secrets (never commit)
 .secrets/
+
+# Conflict copies made by file-sync tools ("name 2.ext"). Never commit these.
+* [2-9].*
+* [2-9]
