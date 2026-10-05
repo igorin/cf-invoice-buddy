@@ -52,6 +52,20 @@ function guard() {
 
 guard();
 const sha = run("git", ["rev-parse", "HEAD"]);
+if (!dryRun && !bootstrap) {
+  // Refuse before uploading if the smoke test could not run afterwards.
+  try {
+    run(
+      "node",
+      ["scripts/smoke.mjs", environment, sha, "--preflight"],
+      inherit
+    );
+  } catch {
+    fail(
+      "Not deployed: the smoke test cannot run now, so the deploy could not be verified."
+    );
+  }
+}
 const shortSha = sha.slice(0, 12);
 console.log(
   `→ Deploying ${shortSha} to ${environment}${dryRun ? " (dry run)" : ""}`

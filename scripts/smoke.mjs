@@ -43,7 +43,13 @@ const FAILED_OUTCOMES = new Set([
 const MAX_REPEATED_WORD_RATIO = 0.2;
 const TEST_SCENARIO = "zero-bill";
 const SPIKE_SCENARIO = "usage-spike";
-const EXPLAIN_ATTEMPTS = 2;
+const DOLLAR_AMOUNT = /-?\$[\d,]+(?:\.\d+)?/g;
+// Free-tier guard. Workers AI gives the account 10,000 neurons a day. A run
+// uses a few hundred; it is refused when the account or the smoke instance
+// does not clearly have room, so a faulty run can never eat the allowance.
+const ACCOUNT_DAILY_NEURON_LIMIT = 10_000;
+const ACCOUNT_NEURON_RESERVE = 2_000;
+const RUN_NEURON_ESTIMATE = 400;
 
 const results = [];
 async function check(name, body) {
@@ -126,6 +132,9 @@ async function openAgent(instance) {
   return {
     states,
     close: () => socket.close(),
+    /** Empties the conversation, so every run sends the model the same small context. */
+    clearHistory: () =>
+      socket.send(JSON.stringify({ type: "cf_agent_chat_clear" })),
     call(method, args = []) {
       return new Promise((resolve, reject) => {
         const id = `smoke-rpc-${++calls}`;
@@ -242,6 +251,55 @@ async function followLogs() {
   };
 }
 
+/** The account's Workers AI neurons so far today (UTC), from GraphQL Analytics. */
+async function accountNeuronsToday() {
+  const credentials = { ...readEnvFile(".dev.vars"), ...process.env };
+  const today = new Date().toISOString().slice(0, 10);
+  const response = await fetch("https://api.cloudflare.com/client/v4/graphql", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${credentials.CF_API_TOKEN}`,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      query: `query($account: String!, $day: Date!) { viewer { accounts(filter: { accountTag: $account }) {
+        rows: aiInferenceAdaptiveGroups(limit: 100, filter: { date: $day }) { sum { totalNeurons } }
+      } } }`,
+      variables: { account: credentials.CF_ACCOUNT_ID, day: today }
+    })
+  });
+  const body = await response.json();
+  const rows = body.data?.viewer?.accounts?.[0]?.rows;
+  if (!response.ok || !Array.isArray(rows)) {
+    throw new Error("the account's neuron usage could not be read");
+  }
+  return rows.reduce((total, row) => total + (row.sum?.totalNeurons ?? 0), 0);
+}
+
+try {
+  const used = await accountNeuronsToday();
+  const ceiling = ACCOUNT_DAILY_NEURON_LIMIT - ACCOUNT_NEURON_RESERVE;
+  console.log(
+    `Account neurons today: ${Math.round(used).toLocaleString("en-US")} of ${ACCOUNT_DAILY_NEURON_LIMIT.toLocaleString("en-US")} free`
+  );
+  if (used + RUN_NEURON_ESTIMATE > ceiling) {
+    fail(
+      `Smoke test not run: it would take the account past ${ceiling.toLocaleString("en-US")} neurons today. The allowance resets at 00:00 UTC.`
+    );
+  }
+} catch (error) {
+  fail(
+    `Smoke test not run: ${error.message}. No model call is made without that figure.`
+  );
+}
+
+// The deploy script runs this part alone before it uploads anything, so a
+// deploy that could not be verified is never made.
+if (process.argv.includes("--preflight")) {
+  console.log("✓ There is room in the free allowance for a smoke run.");
+  process.exit(0);
+}
+
 const stopLogs = await followLogs();
 
 await check("a request with no credentials is refused", async () => {
@@ -311,6 +369,7 @@ await check(
   async () => {
     expect(accountId, "no session");
     agent = await openAgent(`${accountId}-smoke`);
+    agent.clearHistory();
     liveSummary = await agent.call("getUsageSummary");
     expect(liveSummary.dataset === "live", `dataset is ${liveSummary.dataset}`);
     const failed = new Set(
@@ -367,6 +426,11 @@ await check(
 await check("a usage answer is grounded, undoubled and metered", async () => {
   expect(agent && liveSummary, "no agent session");
   const before = agent.states.at(-1)?.selfCost;
+  expect(before, "no meter state received");
+  expect(
+    before.todayNeurons + RUN_NEURON_ESTIMATE <= before.dailyBudgetNeurons,
+    `the smoke instance has used ${Math.round(before.todayNeurons)} of its ${before.dailyBudgetNeurons} neurons today; no model call made`
+  );
   const { text, tools } = await agent.ask("What have I used this month?");
   const after = agent.states.at(-1)?.selfCost;
   expect(text.trim().length > 0, "empty reply");
@@ -395,44 +459,49 @@ await check("a usage answer is grounded, undoubled and metered", async () => {
   );
 });
 
+// If the first model turn failed, no further model calls are made.
+const firstModelTurnFailed = results.at(-1)?.ok === false;
+
 await check(
   "a bill explanation in test mode is grounded and labelled (UC-1, G-9)",
   async () => {
     expect(agent, "no agent session");
+    expect(!firstModelTurnFailed, "skipped: the previous model turn failed");
     await agent.call("setDataMode", ["test", SPIKE_SCENARIO]);
     try {
       const facts = await agent.call("explainBill");
       expect(facts.outcome === "explained", `outcome is ${facts.outcome}`);
-      const impact = facts.findings[0].impact;
-      // The model's wording varies from run to run. One retry is allowed, and
-      // a failed attempt is printed, so the variation stays visible. The
-      // reply holds fixture figures only, so it is safe to print.
-      for (let attempt = 1; ; attempt++) {
-        const { text, tools } = await agent.ask(
-          "Why is my bill higher than usual?"
-        );
-        const problem =
-          text.trim().length === 0
-            ? "empty reply"
-            : !tools.includes("explainBillChange")
-              ? "the explain tool was not called"
-              : !quotesFigure(text, facts.total)
-                ? `the reply does not quote the total ${facts.total}`
-                : !quotesFigure(text, impact)
-                  ? `the reply does not quote the finding's ${impact}`
-                  : !/test data/i.test(text)
-                    ? "the reply does not say the figures are test data"
-                    : null;
-        if (problem === null) {
-          console.log(
-            `  quoted the total ${facts.total} and the finding ${impact}; labelled as test data (attempt ${attempt})`
-          );
-          break;
-        }
-        console.log(`  attempt ${attempt} failed: ${problem}`);
-        console.log(`  reply was: ${text.slice(0, 500)}`);
-        expect(attempt < EXPLAIN_ATTEMPTS, problem);
-      }
+      const { text, tools } = await agent.ask(
+        "Why is my bill higher than usual?"
+      );
+      // The reply holds fixture figures only, so it is safe to print.
+      const show = (problem) => `${problem}. Reply was: ${text.slice(0, 400)}`;
+      expect(text.trim().length > 0, "empty reply");
+      expect(
+        tools.includes("explainBillChange"),
+        show("the explain tool was not called")
+      );
+      // Grounding (rule G-1): every dollar amount in the reply must be one
+      // the tool returned. Which amounts the model chooses to mention varies
+      // from run to run, so no particular one is required.
+      const known = JSON.stringify(facts);
+      const amounts = text.match(DOLLAR_AMOUNT) ?? [];
+      const invented = amounts.filter(
+        (amount) =>
+          !known.includes(`"${amount}"`) && !quotesFigure(known, amount)
+      );
+      expect(amounts.length > 0, show("the reply states no amount"));
+      expect(
+        invented.length === 0,
+        show(`amounts not in the tool result: ${invented.join(", ")}`)
+      );
+      expect(
+        /test data/i.test(text),
+        show("the reply does not say the figures are test data")
+      );
+      console.log(
+        `  ${amounts.length} amounts stated, all from the tool result; labelled as test data`
+      );
     } finally {
       await agent.call("setDataMode", ["live"]);
     }

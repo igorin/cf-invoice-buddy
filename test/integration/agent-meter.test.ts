@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   BUDGET_EXHAUSTED_MESSAGE,
   InvoiceBuddyAgent,
+  NO_ANSWER_MESSAGE,
   createModel
 } from "../../src/agent";
 
@@ -85,7 +86,7 @@ describe("cost meter in the agent (UC-8)", () => {
     expect(rows[0]?.neurons).toBeCloseTo(15.496, 3);
     expect(state.selfCost.monthCostMicros).toBe(170);
     expect(state.selfCost.todayNeurons).toBeCloseTo(15.496, 3);
-    expect(state.selfCost.dailyBudgetNeurons).toBe(10_000);
+    expect(state.selfCost.dailyBudgetNeurons).toBe(1_000);
     expect(state.selfCost.unmeteredTurns).toBe(0);
   });
 
@@ -118,5 +119,69 @@ describe("daily budget (NFR-O3)", () => {
     expect(model.doStreamCalls).toHaveLength(0);
     expect(rows).toHaveLength(1);
     expect(lastText).toBe(BUDGET_EXHAUSTED_MESSAGE);
+  });
+});
+
+describe("loop guard (free-tier limit)", () => {
+  // A model that calls a tool with unparseable input on every step, as the
+  // real model did on 2026-10-05 before the stream fix.
+  function loopingModel() {
+    return new MockLanguageModelV4({
+      doStream: async () => ({
+        stream: simulateReadableStream({
+          chunks: [
+            { type: "stream-start", warnings: [] },
+            {
+              type: "tool-call",
+              toolCallId: crypto.randomUUID(),
+              toolName: "explainBillChange",
+              input: '{"month": "{"month": "20220244'
+            },
+            {
+              type: "finish",
+              finishReason: { unified: "tool-calls", raw: "tool_calls" },
+              usage: {
+                inputTokens: {
+                  total: 100,
+                  noCache: undefined,
+                  cacheRead: undefined,
+                  cacheWrite: undefined
+                },
+                outputTokens: {
+                  total: 10,
+                  text: undefined,
+                  reasoning: undefined
+                }
+              }
+            }
+          ]
+        })
+      })
+    });
+  }
+
+  it("stops a turn after two failed tool calls in a row and says so", async () => {
+    const model = loopingModel();
+    InvoiceBuddyAgent.modelFactory = () => model;
+
+    const { lastText, rows } = await sendTurn("loop-abort");
+
+    expect(model.doStreamCalls).toHaveLength(2);
+    expect(lastText).toBe(NO_ANSWER_MESSAGE);
+    expect(rows).toHaveLength(1);
+  });
+});
+
+describe("per-instance budgets (free-tier limit)", () => {
+  it("gives the smoke-test instance its own, separate budget", async () => {
+    InvoiceBuddyAgent.modelFactory = () => mockModel(10, 1);
+    const owner = await sendTurn("budget-owner");
+    const smoke = await sendTurn("budget-owner-smoke");
+    expect(owner.state.selfCost.dailyBudgetNeurons).toBe(
+      Number(env.DAILY_NEURON_BUDGET)
+    );
+    expect(smoke.state.selfCost.dailyBudgetNeurons).toBe(
+      Number(env.SMOKE_DAILY_NEURON_BUDGET)
+    );
   });
 });

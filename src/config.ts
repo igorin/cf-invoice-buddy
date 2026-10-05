@@ -9,6 +9,7 @@ const ConfigSchema = z.object({
   CF_ACCOUNT_ID: z.string().regex(/^[0-9a-f]{32}$/),
   CF_API_TOKEN: z.string().min(20),
   DAILY_NEURON_BUDGET: z.coerce.number().int().positive(),
+  SMOKE_DAILY_NEURON_BUDGET: z.coerce.number().int().positive(),
   ENVIRONMENT: z.enum(["local", "staging", "production"]),
   ACCESS_TEAM_DOMAIN: z.string().regex(/^[a-z0-9-]+\.cloudflareaccess\.com$/),
   ACCESS_AUD: z.string().regex(/^[0-9a-f]{64}$/),

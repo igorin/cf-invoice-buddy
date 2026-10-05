@@ -5,7 +5,7 @@ import {
   type BillingPeriod,
   type IsoDate
 } from "../domain/periods";
-import { LLAMA_3_3_PRICE } from "../domain/self-cost";
+import { LLAMA_3_3_PRICE, meterTurn } from "../domain/self-cost";
 
 /**
  * Reads the assistant's own cost meter (spec UC-8). The meter is always
@@ -100,4 +100,92 @@ export function describeOwnUsage(sql: Sql, period: BillingPeriod): string {
     )
   );
   return `This assistant's own model usage in the period: ${count(row.neurons)} neurons, ${cost(row.cost)} at list price before the free daily allocation. Metered by the assistant, not taken from the invoice.`;
+}
+
+export type TurnUsage = Readonly<{
+  inputTokens: number | undefined;
+  outputTokens: number | undefined;
+  steps: number;
+}>;
+
+/** Writes one meter row for a chat turn. Nothing is estimated (UC-8). */
+export function recordTurn(
+  sql: Sql,
+  usage: TurnUsage,
+  model: string,
+  today: IsoDate
+): void {
+  const turn = meterTurn(
+    usage.inputTokens === undefined
+      ? undefined
+      : {
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens ?? 0
+        }
+  );
+  const at = new Date().toISOString();
+  if (turn.metered) {
+    sql.exec(
+      `INSERT INTO self_usage
+        (at, model, steps, input_tokens, output_tokens, neurons, cost_micros, metered)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+      at,
+      model,
+      usage.steps,
+      turn.inputTokens,
+      turn.outputTokens,
+      turn.neurons,
+      turn.costMicros
+    );
+  } else {
+    sql.exec(
+      "INSERT INTO self_usage (at, model, steps, metered) VALUES (?, ?, ?, 0)",
+      at,
+      model,
+      usage.steps
+    );
+  }
+  bumpDailyCounter(sql, today, "chat_turns");
+}
+
+/** Counts one event of the day: a chat turn or a turn refused over budget. */
+export function bumpDailyCounter(
+  sql: Sql,
+  today: IsoDate,
+  counter: "chat_turns" | "refused_turns"
+): void {
+  sql.exec(
+    `INSERT INTO self_activity_daily (day, ${counter}) VALUES (?, 1)
+     ON CONFLICT (day) DO UPDATE SET ${counter} = ${counter} + 1`,
+    today
+  );
+}
+
+export function readNeuronsToday(sql: Sql, today: IsoDate): number {
+  const row = first(
+    sql.exec(
+      "SELECT SUM(neurons) AS total FROM self_usage WHERE at >= ?",
+      today
+    )
+  );
+  return Number(row.total ?? 0);
+}
+
+/** The month's metered cost and unmetered turn count, for the UI footer. */
+export function readMonthCost(
+  sql: Sql,
+  today: IsoDate
+): { costMicros: number; unmeteredTurns: number } {
+  const row = first(
+    sql.exec(
+      `SELECT SUM(cost_micros) AS cost,
+        COALESCE(SUM(CASE WHEN metered = 0 THEN 1 ELSE 0 END), 0) AS unmetered
+       FROM self_usage WHERE at >= ?`,
+      `${today.slice(0, 7)}-01`
+    )
+  );
+  return {
+    costMicros: Number(row.cost ?? 0),
+    unmeteredTurns: Number(row.unmetered ?? 0)
+  };
 }
