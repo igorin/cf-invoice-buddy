@@ -7,12 +7,12 @@ Specs are in [spec/](spec/).
 
 Last updated 2026-10-05. The build follows nine phases set out in [spec/low-level.md](spec/low-level.md), section 15. Each phase must be deployed to Cloudflare and pass a smoke test before the next begins.
 
-**Current phase: 1 of 9, deployed.** Phase 1 runs in staging and production behind Cloudflare Access, and both pass the smoke test.
+**Phases 1 and 2 of 9 are deployed.** They run in staging and production behind Cloudflare Access, and both environments pass the smoke test. Phase 3 is next.
 
 | Phase | Scope | Status |
 | --- | --- | --- |
 | 1 | Scaffold, authentication, the assistant's own cost meter and budget, deployment cycle | Deployed to staging and production; hardening drills passed |
-| 2 | Billing domain logic: money, periods, breakdowns, anomaly detectors | Not started |
+| 2 | Billing domain logic: money, periods, breakdowns, anomaly detectors | Deployed. The logic is tested but not yet used by the agent |
 | 3 | Usage data, usage summary panel, test mode | Not started |
 | 4 | Bill explanations and the assistant's cost report | Not started |
 | 5 | Documentation search and grounding checks | Not started |
@@ -26,7 +26,8 @@ What works today, in both deployed environments:
 - A chat agent on Llama 3.3 that answers over the starter chat UI. It has no data tools yet, so it declines to state any figure about the account.
 - Sign-in enforcement through Cloudflare Access tokens, and a lock so only the account's own agent instance can be reached.
 - The cost meter and daily budget.
-- 67 automated tests, format, lint, type check and build, run by CI on every pull request.
+- The billing logic the later phases build on: breakdowns against a baseline, eight anomaly detectors and invoice reconciliation. The agent does not call it yet.
+- 158 automated tests, format, lint, type check and build, run by CI on every pull request.
 - One-command deploys with a smoke test that sends a real chat turn and checks the Worker's logs. The record is in [spec/deployments.md](spec/deployments.md).
 
 Deploys run from a developer machine until a deploy token is added to GitHub.

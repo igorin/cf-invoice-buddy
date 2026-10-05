@@ -19,3 +19,5 @@ Appended by `scripts/deploy.mjs` after a deployment passes its smoke test (NFR-D
 Two flaws found by the drills and fixed in the smoke test: it now waits for the intended commit to be served before judging a deploy (a deploy straight after a rollback served the old commit for a moment), and it retries a failed WebSocket connection.
 
 The smoke test also follows the Worker's live logs during the run and fails on a failed invocation, an uncaught exception or an error-level log line. Peak CPU per invocation in these runs was 29 to 108 ms.
+| 2 | 2026-10-05T03:57:15.633Z | staging | d2edabbdd3ec | passed |
+| 2 | 2026-10-05T03:57:55.736Z | production | d2edabbdd3ec | passed |
