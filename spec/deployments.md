@@ -1,9 +1,6 @@
 # Deployment record
 
-Appended by `scripts/deploy.mjs` after a deployment passes its smoke test (NFR-D7). Hardening drills are recorded by hand in the second table.
-
-| Phase | When (UTC) | Environment | Commit | Smoke test |
-| --- | --- | --- | --- | --- |
+Kept under NFR-D7. The hardening drills were run and written up by hand. The deployments table is last in the file because `scripts/deploy.mjs` appends a row to the end after each deployment that passes its smoke test.
 
 ## Hardening drills
 
@@ -19,5 +16,21 @@ Appended by `scripts/deploy.mjs` after a deployment passes its smoke test (NFR-D
 Two flaws found by the drills and fixed in the smoke test: it now waits for the intended commit to be served before judging a deploy (a deploy straight after a rollback served the old commit for a moment), and it retries a failed WebSocket connection.
 
 The smoke test also follows the Worker's live logs during the run and fails on a failed invocation, an uncaught exception or an error-level log line. Peak CPU per invocation in these runs was 29 to 108 ms.
+
+## Deployments
+
+Every deployment that passed its smoke test, oldest first. Failed and drill deployments are not listed. Four phase 1 rows were lost when this file was reorganised and were rebuilt from the saved deploy logs; their times are when each log was last written.
+
+| Phase | When (UTC) | Environment | Commit | Smoke test |
+| --- | --- | --- | --- | --- |
+| 1 | 2026-10-05T03:19:19.902Z | staging | 42948fd0f237 | passed |
+| 1 | 2026-10-05T03:19:51.056Z | staging | d7c72e46b55d | passed |
+| 1 | 2026-10-05T03:20:14.946Z | production | d7c72e46b55d | passed |
+| 1 | 2026-10-05T03:21:45.930Z | staging | 601eac8bd69e | passed |
+| 1 | 2026-10-05T03:23:26.290Z | staging | ce101ea14f27 | passed |
+| 1 | 2026-10-05T03:26:42Z | staging | e1e4626fefb9 | passed (row rebuilt from the deploy log) |
+| 1 | 2026-10-05T03:27:05Z | production | e1e4626fefb9 | passed (row rebuilt from the deploy log) |
+| 1 | 2026-10-05T03:40:19Z | staging | 5c59c41ec0df | passed (row rebuilt from the deploy log) |
+| 1 | 2026-10-05T03:42:39Z | production | 5c59c41ec0df | passed (row rebuilt from the deploy log) |
 | 2 | 2026-10-05T03:57:15.633Z | staging | d2edabbdd3ec | passed |
 | 2 | 2026-10-05T03:57:55.736Z | production | d2edabbdd3ec | passed |
