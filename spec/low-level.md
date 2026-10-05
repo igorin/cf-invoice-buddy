@@ -10,7 +10,7 @@ This document says how to build what the high-level spec requires. It follows Cl
 
 ## 1. Project setup
 
-The repository holds only `README.md`, `LICENSE` and `.gitignore`. Scaffold the starter into a temporary directory and copy it in, keeping the existing `LICENSE` and `README.md`.
+The starter's files are copied into the repository, keeping the existing `LICENSE`, `README.md`, `AGENTS.md` and `.gitignore`. The starter's own CI workflows are not copied.
 
 ```sh
 npx create-cloudflare@latest --template cloudflare/agents-starter
@@ -18,7 +18,24 @@ npm install
 npm install -D vitest@^4.1.0 @cloudflare/vitest-plugin @vitest/coverage-istanbul @playwright/test
 ```
 
-Starter versions at the time of writing: `agents` 0.17, `@cloudflare/ai-chat` 0.9, `ai` 6, `workers-ai-provider` 3.2, `zod` 4, `wrangler` 4.113, `typescript` 6, `vite` 8.
+The repository first held a Cloudflare Workflows "hello world" scaffold. It was replaced by the starter on 2026-10-05, since the chat UI, build and agent class all come from the starter.
+
+The starter pins older versions than the current releases. The project runs on the upgraded stack below, decided 2026-10-05:
+
+| Package | Starter | Project |
+| --- | --- | --- |
+| `ai` | 6.0 | 7.0.127 |
+| `workers-ai-provider` | 3.2 | 4.0.0 |
+| `agents` | 0.17 | 0.26.0 |
+| `@cloudflare/ai-chat` | 0.9 | 0.12.1 |
+| `@ai-sdk/react` | 3.0 | 4.0 (now required by the build) |
+| `wrangler` | 4.113 | 4.147.0 |
+| `@cloudflare/vite-plugin` | 1.46 | 1.62.5 |
+| `vite` | 8.1 | 8.3.2 |
+| `vitest` | not included | 4.1.11, the major the Cloudflare Vitest plugin requires |
+| `typescript` | 6.0 | 6.0.3, unchanged |
+
+`chatRecovery = true` from the starter no longer type-checks on `@cloudflare/ai-chat` 0.12 and is omitted; the SDK default applies.
 
 ### Changes to the starter
 
@@ -38,7 +55,7 @@ Starter versions at the time of writing: `agents` 0.17, `@cloudflare/ai-chat` 0.
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "cf-invoice-buddy",
   "main": "src/server.ts",
-  "compatibility_date": "2026-10-04",
+  "compatibility_date": "2026-07-21", // must not be newer than the installed Workers runtime supports
   "compatibility_flags": ["nodejs_compat"],
   "ai": { "binding": "AI", "remote": true },
   "assets": {
@@ -463,7 +480,7 @@ Limits from the Cloudflare docs that shape this: a rollback cannot cross a Durab
 
 ### Access and API check (2026-10-04)
 
-Run against the real account with the local `cf` login, the live Workers AI and docs MCP endpoints, and the installed starter packages (`agents` 0.17.4, `@cloudflare/ai-chat` 0.9.3, `ai` 6.0.233, `workers-ai-provider` 3.3.1).
+Run against the real account with the local `cf` login, the live Workers AI and docs MCP endpoints, and the installed starter packages (`agents` 0.17.4, `@cloudflare/ai-chat` 0.9.3, `ai` 6.0.233, `workers-ai-provider` 3.3.1). The stack was upgraded afterwards; see the re-check below.
 
 **Blocked: needs action on the account before phase 1 can start**
 
@@ -476,6 +493,16 @@ Run against the real account with the local `cf` login, the live Workers AI and 
 | B4 | Resolved 2026-10-05 for local work. Wrangler is logged in with Workers, Workers scripts and AI write scopes, which covers local development against the real model. Decided: deployments use the Wrangler login from the developer's machine for now, and move to an API token in CI once it is connected to GitHub (section 13). | Nothing now; CI deploys later | A deploy token from the "Edit Cloudflare Workers" template, limited to this account, stored as the GitHub secret `CLOUDFLARE_API_TOKEN`. It is separate from the runtime read token. |
 | B5 | Resolved 2026-10-05. The GitHub CLI is logged in with `repo` and `workflow` scopes and can see the repository, which is public. | Nothing | Nothing. |
 | B6 | The account is on Workers Free: 10 ms CPU per invocation, 3,000 Workflow steps and 10,000 neurons per day. Whether a chat turn fits in the CPU limit is untested. | Possibly every chat turn | Test in phase 1; Workers Paid if it does not fit, which needs a billing profile. |
+
+**Defect found and worked around in phase 1**
+
+| # | Finding | Blocks | Needed |
+| --- | --- | --- | --- |
+| B8 | With Llama 3.3, every streamed text chunk reached the client twice. The model's stream carries the text in two fields of each chunk (`response` and `choices[0].delta.content`), and `workers-ai-provider` emits both. Reproduced locally on provider 3.3.1 and on 4.0.0; the code path is unchanged between them. Worked around on 2026-10-05: `src/domain/dedupe-stream.ts` wraps the AI binding and removes `response` from a stream chunk only when both fields hold the same text. Verified against the real model: each chunk now arrives once. | Nothing | Remove the wrapper once the provider or the stream is fixed. The smoke test must assert that a reply contains no doubled words, so a regression in either direction is caught. |
+
+**Re-checked on the upgraded stack (2026-10-05)**
+
+`waitForApproval`, `persistMessages`, `onChatResponse`, `waitUntilStable`, `saveMessages`, `runWorkflow`, `approveWorkflow`, `rejectWorkflow`, `addMcpServer`, `waitForMcpConnections`, `routeAgentRequest`, `getAgentByName`, tool `needsApproval`, `pruneMessages`, `stepCountIs`, `totalUsage` and the provider's usage mapping are all present with the behaviour recorded below. The mock model is now `MockLanguageModelV4`. The build still emits the agent as a named class. Type check, lint, 13 unit tests and the production build pass. A live local turn reached the real model and the agent declined to state any figure, as its phase-1 prompt requires.
 
 **Confirmed**
 
@@ -501,6 +528,24 @@ Run against the real account with the local `cf` login, the live Workers AI and 
 | V10 | The Workers AI service name in usage records | B1, B2. |
 | V13 | An actual deployment of Worker, Durable Object and Workflow | The login has Workers write scopes, but nothing was deployed: it would create a public Worker before Access exists (B3). |
 | V8 | oxlint rule names | The installed oxlint did not list them; confirm when writing the lint config. |
+
+### Phase 1 implementation notes (2026-10-05)
+
+Where the build differs from the sections above, this list is current and the sections are to be corrected when phase 1 closes.
+
+| Topic | What was built | Why |
+| --- | --- | --- |
+| Access (section 3, 13) | A hostname-based self-hosted Access application per environment, on the Worker's `workers.dev` hostname. | Cloudflare's docs state that Worker-level Access policies do not support WebSocket connections and return 403 on upgrade. The chat runs over WebSocket. |
+| Identifiers (section 1) | `CF_ACCOUNT_ID`, `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` are secrets, like `CF_API_TOKEN`. They are not in `wrangler.jsonc`. | The repository is public. |
+| Secrets (section 13) | Each environment's secrets live in `.secrets/<env>.env`, git-ignored, and are uploaded by `wrangler deploy --secrets-file`. Smoke test credentials are in `.secrets/smoke.env`. | One command sets code and secrets together, including on the first deploy. |
+| Promotion (section 13) | A staging pass tags the commit `staging-ok/<sha>` locally. The production deploy refuses a commit without that tag. | Enforces staging before production while deploys run from one machine. |
+| `/api/version` (section 3) | Behind authentication. A misconfigured Worker answers every request with a 500 listing the invalid variable names. | The names are needed to diagnose a bad deploy; values are never returned. |
+| Instance lock (section 3) | Checked in the Worker's `fetch` handler before routing, not in the routing hooks. | Simpler, and covered by a test. |
+| Smoke test (section 13) | Implemented: no-credential refusal, commit and configuration, session, foreign instance refusal, one real chat turn that must be undoubled and metered. Not yet implemented: the Workers Logs check. | The logs check needs the observability API and is added before the phase closes. |
+| Meter (section 12) | `self_activity_daily` holds chat and refused turns only. Incoming message, scheduled run and workflow step counters are added with the features that produce them. | Nothing produces them in phase 1. |
+| Tests (section 10) | Integration tests run with remote bindings off and fixed test values, so they need no Cloudflare login and no `.dev.vars`. | CI has neither. |
+
+**Token usage through the stream wrapper.** Verified three ways: unit tests show a usage-only chunk passes through byte for byte and that usage is untouched on a chunk whose duplicate text is removed; an integration test shows the agent meters 343 input and 31 output tokens as 15.496 neurons and 170 micro-dollars; and a live local turn through the real model and the wrapper was metered at 8.17 neurons with no unmetered turns.
 
 ### Checked against ECC skills
 

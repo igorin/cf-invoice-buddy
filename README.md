@@ -3,6 +3,46 @@ Experimental AI bot that runs on Cloudflare and explains why the invoice is what
 
 Specs are in [spec/](spec/).
 
+## Implementation status
+
+Last updated 2026-10-05. The build follows nine phases set out in [spec/low-level.md](spec/low-level.md), section 15. Each phase must be deployed to Cloudflare and pass a smoke test before the next begins.
+
+**Current phase: 1 of 9, in progress.** The code for phase 1 is written and passes all local checks. It has not been deployed yet.
+
+| Phase | Scope | Status |
+| --- | --- | --- |
+| 1 | Scaffold, authentication, the assistant's own cost meter and budget, deployment cycle | Code complete; deployment and hardening drills pending |
+| 2 | Billing domain logic: money, periods, breakdowns, anomaly detectors | Not started |
+| 3 | Usage data, usage summary panel, test mode | Not started |
+| 4 | Bill explanations and the assistant's cost report | Not started |
+| 5 | Documentation search and grounding checks | Not started |
+| 6 | Credit request drafts | Not started |
+| 7 | Monthly invoice close | Not started |
+| 8 | Plan comparison | Not started |
+| 9 | Release | Not started |
+
+Progress against the use cases in [spec/high-level.md](spec/high-level.md):
+
+| Use case | Status |
+| --- | --- |
+| UC-1, UC-2 Explain a higher or lower bill | Not started |
+| UC-3, UC-4 Credit request drafts and history | Not started |
+| UC-6 Monthly invoice close | Not started |
+| UC-7 Compare plans | Not started |
+| UC-8 Cost of the assistant itself | Partly built: every chat turn is metered and a daily budget is enforced. The cost report, the on-screen meter and the share shown in bill explanations are not built. |
+| UC-9 Usage summary | Not started. The data source is proven: the account's real usage was read through the GraphQL Analytics API. |
+| UC-10 Test mode | Not started |
+
+What works today, locally:
+
+- A chat agent on Llama 3.3 that answers over the starter chat UI. It has no data tools yet, so it declines to state any figure about the account.
+- Sign-in enforcement through Cloudflare Access tokens, and a lock so only the account's own agent instance can be reached.
+- The cost meter and daily budget.
+- 64 automated tests, format, lint, type check and build.
+
+Known gaps in phase 1: no deployment has been made, the deployment hardening drills have not run, and the smoke test does not yet check the Workers logs.
+
+
 ## Cloudflare API token for usage and billing data
 
 The app reads your account's usage and invoices through the Cloudflare API. It needs its own API token. Being logged in to the `cf` or `wrangler` CLI is not enough: those logins do not include billing access, and a deployed Worker cannot use them.
@@ -50,12 +90,37 @@ CF_ACCOUNT_ID=<your account id>
 CF_API_TOKEN=<the token secret>
 ```
 
-For a deployed environment, store it as a Worker secret:
-
-```sh
-npx wrangler secret put CF_API_TOKEN --env production
-```
+For a deployed environment, put it in that environment's secrets file, described under "Deploying" below.
 
 ### Known limit
 
 Cloudflare has a newer usage endpoint (`/accounts/{id}/billable/usage`) that reports daily usage including free-tier amounts. It is marked alpha and restricted. A token with the permissions above may still get a 403 from it; access is granted by Cloudflare, not by a token setting.
+
+## Developing
+
+```sh
+npm install
+npm run dev            # local app against the real model; needs `wrangler login`
+npm run check          # format, lint, type check
+npm run test:coverage  # unit and integration tests with coverage thresholds
+```
+
+## Deploying
+
+> Status: the scripts are written and their guards are tested. No deployment has been made with them yet.
+
+There are two environments, `staging` and `production`. Both are deployed by one script, which builds, deploys, runs a smoke test against the live URL and records the result. It refuses a working tree with uncommitted changes and a commit that is not on `origin/main`. Production also requires that the same commit has passed staging.
+
+```sh
+npm run deploy:staging
+npm run deploy:production
+```
+
+Secrets are read from files in `.secrets/`, which is git-ignored:
+
+| File | Contents |
+| --- | --- |
+| `.secrets/staging.env`, `.secrets/production.env` | `CF_ACCOUNT_ID`, `CF_API_TOKEN`, `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD` |
+| `.secrets/smoke.env` | `SMOKE_URL_STAGING`, `SMOKE_URL_PRODUCTION`, `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET` |
+
+Each environment sits behind a Cloudflare Access application on its `workers.dev` hostname. `ACCESS_AUD` is that application's audience tag, and the smoke test signs in with an Access service token.

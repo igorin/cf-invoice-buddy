@@ -156,3 +156,6 @@ vite.config.ts.timestamp-*
 
 # macOS
 .DS_Store
+
+# Deployment secrets (never commit)
+.secrets/
