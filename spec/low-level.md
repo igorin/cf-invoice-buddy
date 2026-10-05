@@ -566,6 +566,26 @@ Phase 2 built the pure billing logic in `src/domain/`: `money.ts`, `periods.ts`,
 | Reconciliation | An invoice within the larger of $1.00 or 1% of the summed usage is a match. | Used by the `invoice-variance` detector and, later, the invoice close. |
 | Fixtures | `test/fixtures/usage.ts` builds daily records for a service and period. | The named scenario files for test mode come in phase 3 and will use the same builder. |
 
+### Phase 3 implementation notes (2026-10-05)
+
+Phase 3 built the usage data path, the usage summary (UC-9) and test mode (UC-10).
+
+| Topic | What was built | Note |
+| --- | --- | --- |
+| Usage source | `GraphqlUsageSource` queries five datasets, one request each: Workers AI neurons, Workers requests, Durable Objects requests, Durable Objects duration and rows read and written, and Workflows steps. | Field names were confirmed against the account's schema and the adapter tests replay the real response shapes. A product with any failed dataset contributes no rows and is reported as unavailable. |
+| Billing source | `CloudflareBillingSource` reads coverage and invoice history and answers one question: does the account have charges? No subscription and no invoices gives "no charges". Anything else gives "unavailable", because charge records are not read yet. | The charge record shape still cannot be observed on this account (V1, V10). A paid account will see quantities with amounts marked unavailable until that is built. |
+| Storage | Migration 3: `usage_records`, `usage_source_status` and `account_billing`, each keyed by dataset. `invoices` and `usage_snapshots` are added with the phases that use them. | Table and column names differ slightly from section 4; the code is current. |
+| Sync | On first use and every six hours by cron, for the current period only. | Earlier periods are fetched in phase 4, which needs them for baselines. |
+| Billing period | Calendar month for an account with no billing cycle. | The anchor day comes from the billing API once an account has one. |
+| Allowances | `src/domain/allowances.ts`: Workers Free and Workers Paid amounts for the metrics above, with sources and a check date that a test keeps under 90 days old. | Free-plan allowances are daily, so their share is measured against today's usage; paid ones against the period. |
+| Test mode | Four scenarios in `src/domain/scenarios.ts`, built relative to today: usage spike, lower bill with no cause, new product, no charges. `setDataMode` is a callable for the UI switch and a tool with `needsApproval`. | A test proves a model-initiated switch does nothing without approval. Each switch is audited and announced in chat with fixed wording. |
+| Tools | `getUsageSummary` and `setDataMode`. The summary given to the model has every figure as text and names its dataset. | First phase in which the model calls tools. |
+| UI | Usage panel above the chat, collapsible; a data-mode select in the header; a test-mode banner. | Section 9 says beside the chat on wide screens. Above was simpler and works at every width. Not yet viewed in a browser by the developer. |
+| Stream wrapper | Now also removes a numeric `response`. Workers AI sends a numeric token as a JSON number there and as text in the delta, so every digit group in a reply was doubled ("311" became "311311"). | Found by the first live usage answer. The phase 1 smoke test could not see it because its replies had no digits. |
+| Smoke test | Uses a dedicated agent instance, `<account id>-smoke`, which the Worker allows alongside the account's own. New checks: the usage summary shows real usage, test mode leaves live data unchanged, and a usage answer quotes a summary figure exactly. | Earlier smoke runs wrote their test questions into the owner's production conversation. Those messages are still there. |
+| Local development | Needs an Access sign-in or service token, because the model connection goes through the protected production hostname. | See the README. |
+| Coverage | Browser components are excluded from the Worker coverage run. | They are to be covered by the end-to-end tests in phase 9. Until then the panel and switch have no automated test. |
+
 ### Checked against ECC skills
 
 | Skill | Applied as |

@@ -1,17 +1,43 @@
 import { AIChatAgent, type OnChatMessageOptions } from "@cloudflare/ai-chat";
+import { callable } from "agents";
 import {
   convertToModelMessages,
   pruneMessages,
   stepCountIs,
   streamText,
+  tool,
   type LanguageModel
 } from "ai";
 import { createWorkersAI } from "workers-ai-provider";
-import { readConfig } from "./config";
+import { z } from "zod";
+import { CloudflareBillingSource } from "./adapters/billing";
+import { GraphqlUsageSource } from "./adapters/graphql-usage";
+import { readConfig, type Config } from "./config";
 import { runMigrations } from "./db/schema";
+import {
+  clearDataset,
+  readBilling,
+  readSourceStatus,
+  readUsage,
+  replaceUsage,
+  saveBilling,
+  saveSourceStatus,
+  type Dataset
+} from "./db/usage-store";
+import { ALLOWANCE_SOURCE, type Plan } from "./domain/allowances";
 import { withDedupedStream } from "./domain/dedupe-stream";
+import { isoDate, periodContaining, type IsoDate } from "./domain/periods";
+import {
+  SCENARIOS,
+  buildScenario,
+  isScenarioId,
+  type ScenarioId
+} from "./domain/scenarios";
 import { checkBudget, meterTurn } from "./domain/self-cost";
+import { buildUsageSummary, type UsageSummary } from "./domain/usage-summary";
+import type { BillingSource, UsageSource } from "./ports/sources";
 import { SYSTEM_PROMPT } from "./prompt";
+import { describeSummaryForModel } from "./tools/usage-summary-tool";
 
 export const MODEL_ID = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 
@@ -28,7 +54,40 @@ export type SelfCost = Readonly<{
   unmeteredTurns: number;
 }>;
 
-export type AgentState = Readonly<{ selfCost: SelfCost }>;
+export type DataMode =
+  | Readonly<{ dataset: "live" }>
+  | Readonly<{ dataset: "test"; scenario: ScenarioId }>;
+
+export type AgentState = Readonly<{
+  selfCost: SelfCost;
+  dataMode: DataMode;
+  lastSyncAt: string | null;
+}>;
+
+/** What the usage panel and the usage tool are built from (UC-9). */
+export type UsageSummaryView = UsageSummary &
+  Readonly<{
+    dataset: Dataset;
+    scenario: ScenarioId | null;
+    plan: Plan;
+    lastSyncAt: string | null;
+    allowanceSource: typeof ALLOWANCE_SOURCE;
+  }>;
+
+// Accounts with no billing cycle are summarised by calendar month.
+const LIVE_ANCHOR_DAY = 1;
+const SYNC_CRON = "0 */6 * * *";
+
+const INITIAL_STATE: AgentState = {
+  selfCost: {
+    monthCostMicros: 0,
+    todayNeurons: 0,
+    dailyBudgetNeurons: 0,
+    unmeteredTurns: 0
+  },
+  dataMode: { dataset: "live" },
+  lastSyncAt: null
+};
 
 type TurnUsage = Readonly<{
   inputTokens: number | undefined;
@@ -45,21 +104,22 @@ export function createModel(env: Env): LanguageModel {
 
 export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
   static modelFactory: (env: Env) => LanguageModel = createModel;
+  static usageSourceFactory: (config: Config) => UsageSource = (config) =>
+    new GraphqlUsageSource(config.CF_ACCOUNT_ID, config.CF_API_TOKEN);
+  static billingSourceFactory: (config: Config) => BillingSource = (config) =>
+    new CloudflareBillingSource(config.CF_ACCOUNT_ID, config.CF_API_TOKEN);
 
   override maxPersistedMessages = 200;
 
-  override initialState: AgentState = {
-    selfCost: {
-      monthCostMicros: 0,
-      todayNeurons: 0,
-      dailyBudgetNeurons: 0,
-      unmeteredTurns: 0
-    }
-  };
+  override initialState: AgentState = INITIAL_STATE;
 
-  override onStart(): void {
+  override async onStart(): Promise<void> {
     runMigrations(this.ctx.storage.sql);
+    // State saved by an earlier version may lack newer fields.
+    this.setState({ ...INITIAL_STATE, ...this.state });
     this.publishSelfCost();
+    // Cron schedules are idempotent, so this is safe on every start.
+    await this.schedule(SYNC_CRON, "syncUsage");
   }
 
   override async onChatMessage(
@@ -80,6 +140,7 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
         toolCalls: "before-last-2-messages",
         reasoning: "before-last-message"
       }),
+      tools: this.tools(),
       stopWhen: stepCountIs(MAX_STEPS_PER_TURN),
       abortSignal: options?.abortSignal,
       onFinish: ({ totalUsage, steps }) => {
@@ -94,14 +155,150 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
     return result.toUIMessageStreamResponse();
   }
 
+  private tools() {
+    return {
+      getUsageSummary: tool({
+        description:
+          "Get what the account has used this billing period, per product and metric, against included allowances, and what was billed. Use it for any question about usage or charges.",
+        inputSchema: z.object({}),
+        execute: async () =>
+          describeSummaryForModel(await this.getUsageSummary())
+      }),
+      setDataMode: tool({
+        description:
+          "Switch between the account's live data and test mode, which uses fixture data. Only call this when the owner asks to switch. The owner must confirm before it runs.",
+        inputSchema: z.object({
+          dataset: z.enum(["live", "test"]),
+          scenario: z.string().optional()
+        }),
+        needsApproval: true,
+        execute: async ({ dataset, scenario }) => {
+          if (dataset === "test" && !isScenarioId(scenario)) {
+            return { switched: false, chooseOneOf: SCENARIOS };
+          }
+          return {
+            switched: true,
+            mode: await this.setDataMode(dataset, scenario)
+          };
+        }
+      })
+    };
+  }
+
+  /** Pulls the current period's usage and billing status for the live dataset. */
+  async syncUsage(): Promise<void> {
+    const result = readConfig(this.env);
+    if (!result.ok) return;
+    const today = this.today();
+    const period = periodContaining(today, LIVE_ANCHOR_DAY);
+    const [usage, billing] = await Promise.all([
+      InvoiceBuddyAgent.usageSourceFactory(result.config).fetchUsage(
+        period.start,
+        today
+      ),
+      InvoiceBuddyAgent.billingSourceFactory(result.config).fetchBilling()
+    ]);
+    const at = new Date().toISOString();
+    const sql = this.ctx.storage.sql;
+    // Rows of a product that failed are left as they were; its status is
+    // what keeps them out of the summary.
+    const readable = usage.sources
+      .filter((s) => s.available)
+      .map((s) => s.service);
+    replaceUsage(sql, "live", readable, period.start, today, usage.records);
+    saveSourceStatus(sql, "live", usage.sources, at);
+    saveBilling(sql, "live", billing.billing, billing.plan, at);
+    this.setState({ ...this.state, lastSyncAt: at });
+  }
+
+  @callable()
+  async getUsageSummary(): Promise<UsageSummaryView> {
+    const mode = this.state.dataMode;
+    const sql = this.ctx.storage.sql;
+    if (mode.dataset === "live" && readBilling(sql, "live") === null) {
+      await this.syncUsage();
+    }
+    const today = this.today();
+    const period = periodContaining(today, LIVE_ANCHOR_DAY);
+    const stored = readBilling(sql, mode.dataset);
+    const summary = buildUsageSummary({
+      records: readUsage(sql, mode.dataset, period.start, today),
+      period,
+      today,
+      plan: stored?.plan ?? "free",
+      sources: readSourceStatus(sql, mode.dataset),
+      billing: stored?.billing ?? {
+        status: "unavailable",
+        reason: "billing data has not been read yet"
+      }
+    });
+    return {
+      ...summary,
+      dataset: mode.dataset,
+      scenario: mode.dataset === "test" ? mode.scenario : null,
+      plan: stored?.plan ?? "free",
+      lastSyncAt: mode.dataset === "live" ? (stored?.syncedAt ?? null) : null,
+      allowanceSource: ALLOWANCE_SOURCE
+    };
+  }
+
+  /**
+   * Switches between live data and a test scenario (UC-10). Reached only
+   * from the owner's switch in the UI or an owner-approved tool call.
+   */
+  @callable()
+  async setDataMode(dataset: unknown, scenario?: unknown): Promise<DataMode> {
+    if (dataset !== "live" && dataset !== "test") {
+      throw new Error("Unknown data mode");
+    }
+    const mode: DataMode =
+      dataset === "live" ? { dataset } : this.loadScenario(scenario);
+    this.sql`
+      INSERT INTO audit_log (at, actor, action, subject_id, dataset)
+      VALUES (${new Date().toISOString()}, 'owner', 'set_data_mode',
+        ${mode.dataset === "test" ? mode.scenario : null}, ${mode.dataset})`;
+    this.setState({ ...this.state, dataMode: mode });
+    const title = SCENARIOS.find(
+      (s) => mode.dataset === "test" && s.id === mode.scenario
+    )?.title;
+    await this.persistMessages([
+      ...this.messages,
+      {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: title
+              ? `Switched to test mode: ${title}. Figures are fixture data.`
+              : "Switched to live data."
+          }
+        ]
+      }
+    ]);
+    return mode;
+  }
+
+  private loadScenario(scenario: unknown): DataMode {
+    if (!isScenarioId(scenario)) throw new Error("Unknown test scenario");
+    const today = this.today();
+    const data = buildScenario(scenario, today);
+    const sql = this.ctx.storage.sql;
+    clearDataset(sql, "test");
+    const first = data.records.map((r) => r.date).sort()[0] ?? today;
+    replaceUsage(sql, "test", [], first, today, data.records);
+    saveBilling(sql, "test", data.billing, data.plan, new Date().toISOString());
+    return { dataset: "test", scenario };
+  }
+
   private dailyBudget(): number {
     const result = readConfig(this.env);
     // With no valid budget configured, refuse rather than spend unbounded.
     return result.ok ? result.config.DAILY_NEURON_BUDGET : 0;
   }
 
-  private today(): string {
-    return new Date().toISOString().slice(0, 10);
+  private today(): IsoDate {
+    return isoDate(new Date().toISOString().slice(0, 10));
   }
 
   private neuronsToday(): number {
@@ -151,6 +348,7 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
         COALESCE(SUM(CASE WHEN metered = 0 THEN 1 ELSE 0 END), 0) AS unmetered
       FROM self_usage WHERE at >= ${monthStart}`;
     this.setState({
+      ...this.state,
       selfCost: {
         monthCostMicros: month?.cost ?? 0,
         todayNeurons: this.neuronsToday(),

@@ -2,7 +2,12 @@ import { Suspense, useCallback, useState, useEffect, useRef } from "react";
 import { useAgent } from "agents/react";
 import { useAgentChat } from "@cloudflare/ai-chat/react";
 import { getToolName, isToolUIPart, type UIMessage } from "ai";
-import type { InvoiceBuddyAgent } from "./agent";
+import type { AgentState, InvoiceBuddyAgent } from "./agent";
+import {
+  DataModeSwitch,
+  TestModeBanner,
+  UsagePanel
+} from "./components/usage-panel";
 import {
   Badge,
   Button,
@@ -264,7 +269,10 @@ function Chat({ accountId }: { accountId: string }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const agent = useAgent<InvoiceBuddyAgent>({
+  const [agentState, setAgentState] = useState<AgentState | null>(null);
+
+  const agent = useAgent<InvoiceBuddyAgent, AgentState>({
+    onStateUpdate: useCallback((state: AgentState) => setAgentState(state), []),
     agent: "InvoiceBuddyAgent",
     // One agent instance per account; the Worker refuses any other name.
     name: accountId,
@@ -429,6 +437,9 @@ function Chat({ accountId }: { accountId: string }) {
                 aria-label="Toggle debug mode"
               />
             </div>
+            {agentState && (
+              <DataModeSwitch mode={agentState.dataMode} calls={agent.stub} />
+            )}
             <ThemeToggle />
             <Button
               variant="secondary"
@@ -441,6 +452,9 @@ function Chat({ accountId }: { accountId: string }) {
         </div>
       </header>
 
+      {agentState && <TestModeBanner mode={agentState.dataMode} />}
+      <UsagePanel state={agentState} calls={agent.stub} connected={connected} />
+
       {/* Messages */}
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-3xl mx-auto px-5 py-6 space-y-5">
@@ -450,7 +464,10 @@ function Chat({ accountId }: { accountId: string }) {
               title="Start a conversation"
               contents={
                 <div className="flex flex-wrap justify-center gap-2">
-                  {["What can you help me with?"].map((prompt) => (
+                  {[
+                    "What have I used this month?",
+                    "How close am I to my free limits?"
+                  ].map((prompt) => (
                     <Button
                       key={prompt}
                       variant="outline"

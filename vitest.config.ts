@@ -1,8 +1,10 @@
 import { cloudflareTest } from "@cloudflare/vitest-plugin";
+import agents from "agents/vite";
 import { defineConfig } from "vitest/config";
 
 const DOMAIN = "src/domain/**";
-const BROWSER_UI = ["src/app.tsx", "src/client.tsx"];
+// Browser code is covered by the end-to-end tests planned for phase 9.
+const BROWSER_UI = ["src/app.tsx", "src/client.tsx", "src/components/**"];
 
 /**
  * Coverage is measured in two separate runs (see the test:coverage script).
@@ -40,13 +42,18 @@ export default defineConfig({
       {
         // Agent and Worker code: runs inside the Workers runtime.
         plugins: [
+          // Compiles the @callable decorator, as the app build does.
+          agents(),
           cloudflareTest({
             wrangler: { configPath: "./wrangler.jsonc" },
             // Tests never call the real model, so no Cloudflare login is needed.
             remoteBindings: false,
             // Fixed test values, so the suite does not depend on .dev.vars.
             miniflare: {
-              bindings: { CF_ACCOUNT_ID: "0123456789abcdef0123456789abcdef" }
+              bindings: {
+                CF_ACCOUNT_ID: "0123456789abcdef0123456789abcdef",
+                CF_API_TOKEN: "test-token-not-a-real-credential"
+              }
             }
           })
         ],

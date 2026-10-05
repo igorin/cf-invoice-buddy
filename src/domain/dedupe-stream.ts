@@ -3,7 +3,7 @@
  * Workers AI carries its text twice: in `response` and in
  * `choices[0].delta.content`. The provider emits both, so every word reaches
  * the client twice. This removes `response` from a chunk only when both
- * fields hold the same text, and is a no-op otherwise. Delete it once the
+ * fields hold the same token, and is a no-op otherwise. Delete it once the
  * provider or the stream is fixed.
  */
 
@@ -22,6 +22,25 @@ function readChoiceText(chunk: Record<string, unknown>): string | undefined {
   return typeof content === "string" ? content : undefined;
 }
 
+/**
+ * Whether `response` carries the same token as the choices delta. A numeric
+ * token arrives as a JSON number in `response` and as text in the delta, so
+ * numbers are compared by value ("1.50" and 1.5 are the same token).
+ */
+function repeatsChoiceText(
+  response: unknown,
+  choiceText: string | undefined
+): boolean {
+  if (choiceText === undefined) return false;
+  if (typeof response === "string") {
+    return response !== "" && response === choiceText;
+  }
+  if (typeof response === "number") {
+    return choiceText.trim() !== "" && Number(choiceText) === response;
+  }
+  return false;
+}
+
 /** Returns the chunk JSON without `response` when the choices delta repeats it. */
 export function dropDuplicateText(payload: string): string {
   let chunk: unknown;
@@ -32,9 +51,7 @@ export function dropDuplicateText(payload: string): string {
   }
   if (!isRecord(chunk)) return payload;
 
-  const response = chunk.response;
-  if (typeof response !== "string" || response === "") return payload;
-  if (readChoiceText(chunk) !== response) return payload;
+  if (!repeatsChoiceText(chunk.response, readChoiceText(chunk))) return payload;
 
   const { response: _duplicate, ...rest } = chunk;
   return JSON.stringify(rest);

@@ -90,10 +90,12 @@ Cloudflare has a newer usage endpoint (`/accounts/{id}/billable/usage`) that rep
 
 ```sh
 npm install
-npm run dev            # local app against the real model; needs `wrangler login`
+npm run dev            # local app against the real model; see the note below
 npm run check          # format, lint, type check
 npm run test:coverage  # unit and integration tests with coverage thresholds
 ```
+
+Local development reaches the real model through the production Worker's hostname, which Cloudflare Access protects. Run `npm run dev` in a terminal and sign in when the browser prompt appears, or set `CLOUDFLARE_ACCESS_CLIENT_ID` and `CLOUDFLARE_ACCESS_CLIENT_SECRET` to an Access service token for non-interactive use.
 
 ## Deploying
 

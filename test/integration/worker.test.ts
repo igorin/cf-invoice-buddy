@@ -65,6 +65,20 @@ describe("agent instance lock (NFR-S1)", () => {
     expect(response.status).toBe(403);
   });
 
+  it("allows the account's smoke-test instance", async () => {
+    const response = await get(
+      `/agents/invoice-buddy-agent/${env.CF_ACCOUNT_ID}-smoke/get-messages`
+    );
+    expect(response.status).not.toBe(403);
+  });
+
+  it("refuses a name that only starts with the account id", async () => {
+    const response = await get(
+      `/agents/invoice-buddy-agent/${env.CF_ACCOUNT_ID}-other/get-messages`
+    );
+    expect(response.status).toBe(403);
+  });
+
   it("routes the account's own instance to the agent", async () => {
     const response = await get(
       `/agents/invoice-buddy-agent/${env.CF_ACCOUNT_ID}/get-messages`
