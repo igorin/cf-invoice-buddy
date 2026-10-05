@@ -492,7 +492,7 @@ Run against the real account with the local `cf` login, the live Workers AI and 
 | B3 | Resolved 2026-10-05. Zero Trust is set up; the Access organization exists and has an auth domain. No Access application or policy exists yet for the Worker. | Nothing | The application, policy and service token are created in phase 1. |
 | B4 | Resolved 2026-10-05 for local work. Wrangler is logged in with Workers, Workers scripts and AI write scopes, which covers local development against the real model. Decided: deployments use the Wrangler login from the developer's machine for now, and move to an API token in CI once it is connected to GitHub (section 13). | Nothing now; CI deploys later | A deploy token from the "Edit Cloudflare Workers" template, limited to this account, stored as the GitHub secret `CLOUDFLARE_API_TOKEN`. It is separate from the runtime read token. |
 | B5 | Resolved 2026-10-05. The GitHub CLI is logged in with `repo` and `workflow` scopes and can see the repository, which is public. | Nothing | Nothing. |
-| B6 | The account is on Workers Free: 10 ms CPU per invocation, 3,000 Workflow steps and 10,000 neurons per day. Whether a chat turn fits in the CPU limit is untested. | Possibly every chat turn | Test in phase 1; Workers Paid if it does not fit, which needs a billing profile. |
+| B6 | Resolved 2026-10-05. The account is on Workers Free. Real chat turns completed in staging and production on every smoke run, so a phase-1 turn fits the free plan's limits. Turns with tool calls are heavier and are re-checked by the smoke test in later phases. | Nothing now | Workers Paid if a later phase's smoke turn fails on CPU time. |
 
 **Defect found and worked around in phase 1**
 
@@ -544,6 +544,8 @@ Where the build differs from the sections above, this list is current and the se
 | Smoke test (section 13) | Implemented: no-credential refusal, commit and configuration, session, foreign instance refusal, one real chat turn that must be undoubled and metered. Not yet implemented: the Workers Logs check. | The logs check needs the observability API and is added before the phase closes. |
 | Meter (section 12) | `self_activity_daily` holds chat and refused turns only. Incoming message, scheduled run and workflow step counters are added with the features that produce them. | Nothing produces them in phase 1. |
 | Tests (section 10) | Integration tests run with remote bindings off and fixed test values, so they need no Cloudflare login and no `.dev.vars`. | CI has neither. |
+
+**Deployed 2026-10-05.** Staging and production run behind Access and pass the smoke test. The five hardening drills are recorded in `spec/deployments.md`. They found two flaws in the smoke test, both fixed: it now waits for the intended commit to be served, and it retries a failed WebSocket connection. Still open in phase 1: the Workers Logs check, exercising the automatic production rollback, and the CI deploy workflow, which waits for a deploy token in GitHub. The `deployed/phase-1` tag exists because production passed its smoke test; `.phase` stays at 1 until those items are closed or accepted.
 
 **Token usage through the stream wrapper.** Verified three ways: unit tests show a usage-only chunk passes through byte for byte and that usage is untouched on a chunk whose duplicate text is removed; an integration test shows the agent meters 343 input and 31 output tokens as 15.496 neurons and 170 micro-dollars; and a live local turn through the real model and the wrapper was metered at 8.17 neurons with no unmetered turns.
 
