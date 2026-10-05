@@ -550,6 +550,22 @@ Where the build differs from the sections above, this list is current and the se
 
 **Token usage through the stream wrapper.** Verified three ways: unit tests show a usage-only chunk passes through byte for byte and that usage is untouched on a chunk whose duplicate text is removed; an integration test shows the agent meters 343 input and 31 output tokens as 15.496 neurons and 170 micro-dollars; and a live local turn through the real model and the wrapper was metered at 8.17 neurons with no unmetered turns.
 
+### Phase 2 implementation notes (2026-10-05)
+
+Phase 2 built the pure billing logic in `src/domain/`: `money.ts`, `periods.ts`, `usage.ts`, `breakdown.ts`, `findings.ts`, `detectors.ts` and `reconcile.ts`. Nothing in the Worker calls it yet; phase 3 and 4 do.
+
+| Topic | What was built | Note |
+| --- | --- | --- |
+| Usage record | One record per day, service and metric, with optional zone, quantity and unit, an optional billable quantity, and a cost that may be null. | The billable quantity is what lets a detector see an included allowance run out. A null cost is counted as "uncosted", never as zero. |
+| Baseline | The mean of the baseline periods per service, rounded once per service. The total baseline is the sum of those, so the per-service differences always add up to the total difference (UC-1). Fewer than two baseline periods gives no comparison. | The caller chooses the baseline periods; the default of the three preceding closed periods is applied in phase 4. |
+| Detectors | All eight from section 6, in one file with the types in `findings.ts`, not one file per detector. | They share helpers and the file stays under the 400-line limit. |
+| `usage-spike` | A day costing at least 3 times the service's median daily cost over the baseline periods. | Section 6 says a trailing 28-day median. The baseline periods are used so the detector needs no data outside what the comparison already loads. |
+| `usage-drop` | A service costing half its usual or less. | Smaller decreases produce no finding and are reported as unexplained, which is what rule G-4 needs. |
+| Minimum impact | A change under $1.00 produces no finding. | Named constants at the top of `detectors.ts`. |
+| Unexplained remainder | The total difference minus what the service-level findings (spike, drop, new, removed) account for, each capped at its service's actual change. | Zone, allowance, period-length and invoice findings describe the same dollars from another angle, so they are not subtracted. |
+| Reconciliation | An invoice within the larger of $1.00 or 1% of the summed usage is a match. | Used by the `invoice-variance` detector and, later, the invoice close. |
+| Fixtures | `test/fixtures/usage.ts` builds daily records for a service and period. | The named scenario files for test mode come in phase 3 and will use the same builder. |
+
 ### Checked against ECC skills
 
 | Skill | Applied as |

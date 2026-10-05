@@ -277,7 +277,7 @@ The project is built for an exercise with the criteria below. This section maps 
 | Workflow or coordination; Workflows, Workers or Durable Objects are recommended | A Durable Object per account coordinates the chat, tools, state and schedules. A Cloudflare Workflow runs the invoice close with a durable approval gate (UC-6). A Worker routes and authenticates. | The Durable Object and Worker are built and deployed. The Workflow arrives in phase 7. |
 | User input by chat or voice; Pages or Realtime are recommended | A chat interface over WebSocket, from the official agents starter. It is served as static assets of the same Worker, not from Pages. There is no voice input. | Built and deployed. |
 | Memory or state | The Durable Object's SQLite holds chat history, the cost meter, and later usage, invoices, credit drafts and closes. Agent state is synced to the browser. | Chat history and the meter are built and deployed. The rest follows by phase. |
-| AI-assisted coding is allowed, but the prompt history must be submitted | Not yet covered. See NFR-P1. | Open. |
+| AI-assisted coding is allowed, but the prompt history must be submitted | A prompt history file kept outside the repository (NFR-P1). | Kept up to date; submitted separately. |
 
 Two points to keep in view:
 
@@ -288,7 +288,7 @@ Two points to keep in view:
 
 | ID | Requirement |
 | --- | --- |
-| NFR-P1 | The prompts given to the AI coding assistant are kept in the repository in a single file, in order, and brought up to date at the end of each phase. They contain no secrets or account identifiers. |
+| NFR-P1 | The prompts given to the AI coding assistant are kept verbatim and in order in a single file, updated as the work proceeds. The file is kept outside the repository and is not committed; it is submitted separately. Decided 2026-10-05. |
 
 ## 10. Open questions
 
