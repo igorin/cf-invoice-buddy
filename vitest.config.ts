@@ -1,6 +1,35 @@
 import { cloudflareTest } from "@cloudflare/vitest-plugin";
 import { defineConfig } from "vitest/config";
 
+const DOMAIN = "src/domain/**";
+const BROWSER_UI = ["src/app.tsx", "src/client.tsx"];
+
+/**
+ * Coverage is measured in two separate runs (see the test:coverage script).
+ * Measuring domain files in both projects at once made the merged figures
+ * depend on run order, which failed CI while passing locally.
+ *  - "domain": pure domain code, by the unit tests alone, at 95%.
+ *  - anything else: the rest of the Worker, by the integration tests, at 80%.
+ */
+function coverageFor(scope: string | undefined) {
+  const all = (percent: number) => ({
+    lines: percent,
+    branches: percent,
+    functions: percent,
+    statements: percent
+  });
+  // V8 coverage is not supported in the Workers pool.
+  const provider = "istanbul" as const;
+  return scope === "domain"
+    ? { provider, include: [DOMAIN], thresholds: all(95) }
+    : {
+        provider,
+        include: ["src/**"],
+        exclude: [...BROWSER_UI, DOMAIN],
+        thresholds: all(80)
+      };
+}
+
 export default defineConfig({
   test: {
     projects: [
@@ -28,23 +57,6 @@ export default defineConfig({
         }
       }
     ],
-    coverage: {
-      // V8 coverage is not supported in the Workers pool.
-      provider: "istanbul",
-      include: ["src/**"],
-      exclude: ["src/app.tsx", "src/client.tsx"],
-      thresholds: {
-        lines: 80,
-        branches: 80,
-        functions: 80,
-        statements: 80,
-        "src/domain/**": {
-          lines: 95,
-          branches: 95,
-          functions: 95,
-          statements: 95
-        }
-      }
-    }
+    coverage: coverageFor(process.env.COVERAGE_SCOPE)
   }
 });
