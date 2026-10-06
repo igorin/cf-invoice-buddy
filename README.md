@@ -5,23 +5,23 @@ Specs are in [spec/](spec/).
 
 ## Implementation status
 
-Last updated 2026-10-05. The build follows nine phases set out in [spec/low-level.md](spec/low-level.md), section 15. Each phase must be deployed to Cloudflare and pass a smoke test before the next begins.
+Last updated 2026-10-06. The build follows nine phases set out in [spec/low-level.md](spec/low-level.md), section 15. Each phase must be deployed to Cloudflare and pass a smoke test before the next begins.
 
-**Phases 1 to 3 of 9 are deployed.** They run in staging and production behind Cloudflare Access, and both environments pass the smoke test. Phase 4 is deployed to staging only: its production deploy failed a smoke check and was rolled back automatically.
+**Phases 1 to 4 of 9 are deployed.** They run in staging and production behind Cloudflare Access, and both environments pass the smoke test. Phase 5 is next.
 
 | Phase | Scope | Status |
 | --- | --- | --- |
 | 1 | Scaffold, authentication, the assistant's own cost meter and budget, deployment cycle | Deployed to staging and production; hardening drills passed |
 | 2 | Billing domain logic: money, periods, breakdowns, anomaly detectors | Deployed. The logic is tested but not yet used by the agent |
 | 3 | Usage data, usage summary panel, test mode | Deployed |
-| 4 | Bill explanations and the assistant's cost report | On staging; production rolled back, under investigation |
+| 4 | Bill explanations and the assistant's cost report | Deployed |
 | 5 | Documentation search and grounding checks | Not started |
 | 6 | Credit request drafts | Not started |
 | 7 | Monthly invoice close | Not started |
 | 8 | Plan comparison | Not started |
 | 9 | Release | Not started |
 
-What works today (bill explanations, the breakdown card and the cost report are on staging only):
+What works today, in both deployed environments:
 
 - A chat agent on Llama 3.3 over the starter chat UI. It reports the account's usage from real data and explains a month's bill against a baseline, stating only causes found in the account's data.
 - A usage summary panel, always on screen: what each product used this period, against its included allowance, and what was billed. It works on an account with a $0 bill.

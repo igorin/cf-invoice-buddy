@@ -606,7 +606,7 @@ Phase 4 built bill explanations (UC-1, UC-2) and the rest of the assistant's cos
 | Budget | The daily budget stopped a local test instance after failed tool-call loops used its 10,000 neurons. | The guard works; the loops are fixed by the two changes above. |
 | File size | Tool definitions, the explain orchestration, scenario loading and the cost report moved out of `agent.ts` into `src/tools/`, `src/services/` and `src/db/`. | Keeps every file under 400 lines. |
 
-**Phase 4 deployment status (2026-10-05).** Phase 4 is on staging. Production is on phase 3 after an automatic rollback. The production deploy is to be retried after the neuron allowance resets at 00:00 UTC.
+**Phase 4 deployment status (2026-10-06).** Phase 4 is deployed to staging and production at commit `888672d`, with the free-tier guards. Both passed all eight smoke checks on the first attempt after the neuron allowance reset, and the `deployed/phase-4` tag is in place. The single model turn used 98 neurons on staging and 101 on production, against the 250 the pre-flight check allows for. The first production deploy, on 2026-10-05, had been rolled back automatically; the account of that is below.
 
 ### Failure investigation and free-tier guards (2026-10-05)
 
