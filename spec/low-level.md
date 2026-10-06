@@ -757,7 +757,7 @@ On branch `experiment/cheaper-testing`, not merged. Prompted by research into te
 3. Whether the cheaper model calls tools reliably enough for the smoke test's turn. If it does not, it would fail deploys and roll production back for no fault of the build.
 4. Whether recordings of real turns replay cleanly. A reply that quotes the assistant's own usage will not, because that figure differs on each run.
 
-Known costs: a cached smoke turn no longer proves the model answered for that deploy; with the cheaper model the smoke test no longer exercises the chat model at all; the cost meter counts a cached turn's tokens as if they were billed. No gateway has been created and no setting is on in any environment.
+Known costs: a cached smoke turn no longer proves the model answered for that deploy; with the cheaper model the smoke test no longer exercises the chat model at all; the cost meter counts a cached turn's tokens as if they were billed. The owner created the gateway `invoice-buddy-smoke` in the account on 2026-10-06, and `AI_GATEWAY_ID` is set to it for staging and production on this branch only. `SMOKE_MODEL_ID` is left unset until a live call shows the cheaper model calls tools. Nothing from this branch is deployed.
 
 ### Checked against ECC skills
 

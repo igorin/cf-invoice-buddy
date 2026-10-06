@@ -50,7 +50,10 @@
         "ENVIRONMENT": "staging",
         "DAILY_NEURON_BUDGET": "400",
         "SMOKE_DAILY_NEURON_BUDGET": "1000",
-        "AUTH_MODE": "access"
+        "AUTH_MODE": "access",
+        // The smoke-test instance reaches the model through this AI Gateway,
+        // whose cache serves a repeated smoke turn (spec section 10).
+        "AI_GATEWAY_ID": "invoice-buddy-smoke"
       }
     },
     "production": {
@@ -65,7 +68,10 @@
         "ENVIRONMENT": "production",
         "DAILY_NEURON_BUDGET": "3000",
         "SMOKE_DAILY_NEURON_BUDGET": "600",
-        "AUTH_MODE": "access"
+        "AUTH_MODE": "access",
+        // The smoke-test instance reaches the model through this AI Gateway,
+        // whose cache serves a repeated smoke turn (spec section 10).
+        "AI_GATEWAY_ID": "invoice-buddy-smoke"
       }
     }
   }
