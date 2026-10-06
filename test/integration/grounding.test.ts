@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { CloudflareDocsSearch } from "../../src/adapters/docs-search";
 import { InvoiceBuddyAgent, createModel } from "../../src/agent";
 import type { DocsSearchResult, Fetcher } from "../../src/ports/sources";
-import { GROUNDING_NOTICE } from "../../src/services/grounding-service";
+import { UNVERIFIED_MESSAGE } from "../../src/domain/verified-stream";
 
 const PRICING =
   "https://developers.cloudflare.com/workers-ai/platform/pricing/";
@@ -75,17 +75,18 @@ async function turn(name: string, question: string) {
 }
 
 describe("response checker in the agent (spec section 7)", () => {
-  it("adds a correction notice and records it when a reply states a figure no tool gave", async () => {
+  it("withholds a reply that states a figure no tool gave, and records it", async () => {
     InvoiceBuddyAgent.modelFactory = () =>
       sayingModel("Your bill is $412.00 this month.");
     const { texts, audit } = await turn("ground-bad", "What is my bill?");
-    expect(texts.at(-1)).toBe(GROUNDING_NOTICE);
+    expect(texts.at(-1)).toBe(UNVERIFIED_MESSAGE);
+    expect(texts.join(" ")).not.toContain("$412.00");
     expect(audit).toHaveLength(1);
     expect(audit[0]?.action).toBe("grounding_violation");
     expect(audit[0]?.detail_json).toContain("$412.00");
   });
 
-  it("flags a link the model made up", async () => {
+  it("withholds a reply with a link the model made up", async () => {
     InvoiceBuddyAgent.modelFactory = () =>
       sayingModel(
         "See https://developers.cloudflare.com/billing/hidden-fees/ for details."
@@ -94,7 +95,8 @@ describe("response checker in the agent (spec section 7)", () => {
       "ground-link",
       "Where can I read more?"
     );
-    expect(texts.at(-1)).toBe(GROUNDING_NOTICE);
+    expect(texts.at(-1)).toBe(UNVERIFIED_MESSAGE);
+    expect(texts.join(" ")).not.toContain("hidden-fees");
     expect(audit[0]?.detail_json).toContain("G-7");
   });
 

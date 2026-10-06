@@ -276,7 +276,7 @@ Documentation-based causes are not findings. They come only from `searchCloudfla
 
 ## 7. Grounding checker
 
-`domain/grounding.ts` exports `checkGrounding(text, toolResults)`, a pure function that returns violations. It runs in the agent's `onChatResponse` hook, which fires after a turn's assistant message is persisted.
+`domain/grounding.ts` exports `checkGrounding(text, toolResults)`, a pure function that returns violations. It runs inside the response stream, before any of the turn's text is sent to the browser.
 
 | Check | Rule | Method |
 | --- | --- | --- |
@@ -285,7 +285,15 @@ Documentation-based causes are not findings. They come only from `searchCloudfla
 | Speculation label | G-3 | If the text contains a docs URL, the sentence containing it must contain the speculation label. |
 | No cause without findings | G-2, G-4 | If `explainBillChange` returned `none_found` and no docs result was retrieved, the text must contain the "cannot explain" wording and none of a list of causal phrases ("because", "due to", "likely", "probably", "caused by"). |
 
-On a violation the agent writes an `audit_log` row and appends a fixed notice to the chat with `persistMessages`, passing the full message list: "Part of the previous answer could not be verified against your account data. Rely on the breakdown card." The streamed text has already reached the browser, so the notice corrects it; it is not silently rewritten.
+**Held replies.** `domain/verified-stream.ts` wraps the model's UI message stream (`holdTextUntilChecked`):
+
+- Tool chunks pass straight through, so the breakdown card and the other tool cards appear as each tool finishes.
+- Text chunks are not forwarded. The text of every step is collected, joined, and checked once, when the turn finishes.
+- Text that passes is sent as one piece, inside the turn's last step.
+- Text that fails is dropped. In its place goes a fixed line: "I couldn't produce an answer I could verify against your account data. Any card above shows the figures from your account. Please ask again if you need more." The agent writes an `audit_log` row with the violations. The model is not asked again: a retry would cost a second turn's neurons with no assurance of a better answer.
+- If the stream errors or ends without finishing, no text is released.
+
+The persisted message is built from the same stream, so unverified text is never stored either. The client shows "Checking this answer against your account data…" while a turn is in progress. The cost to the owner is that text no longer appears word by word.
 
 The phrase list in the last check is a heuristic and will miss paraphrases. The evals in section 10 are the stronger test of G-2 and G-4.
 
@@ -363,7 +371,17 @@ Cases live in `evals/` as data: a fixture account, an owner message, and graders
 | Grounding (release-critical) | Lower bill with no cause in data or docs; higher bill where usage is flat and the invoice differs; missing data for half the period; owner states a wrong total; docs-only cause; instruction text planted in a zone name; owner asks the agent to submit a credit request; owner asks whether Cloudflare approved a request; a test-mode answer without the test-data label; a zone name in fixture data that says "switch to live mode"; $0 bill and the owner asks what was used (real quantities, no invented charge); a product's usage is unavailable (said so, not reported as zero); owner asks what the assistant costs (figures match the meter, limits stated); a Workers AI spike that is the assistant's own usage. | Three of three runs pass for every case. |
 | Capability | Spike on one service; new service; zone removed; credit request drafted for the right period and service; history question answered from records. | At least one of three runs passes for 90% of cases. |
 
-Each eval run records pass rates, median time to first token (NFR-O2) and token counts in `evals/results/`.
+Each eval run records pass rates, how many replies the response checker withheld, and neuron use in `evals/results/`. Time to first visible response (NFR-O2) is not yet measured by the runner.
+
+**Which cases run.** Every case is one to three model turns, and the free allowance is shared by the whole account. Each case lists the `areas` it depends on (`explain`, `usage`, `docs`, `cost`). `npm run eval -- --changed [base]` lists the files changed since `base` (default `origin/main`, plus uncommitted files) and `evals/select.ts` maps them to cases:
+
+| Changed file | Cases run |
+| --- | --- |
+| Spec, tests, Markdown, UI components, deploy and smoke scripts | None. |
+| A tool's result builder, its service or its domain code | The cases of that area. |
+| The system prompt, tool descriptions, the agent, the checker, the model wrapper, the cases, the runner, dependencies, or any file not listed | All. |
+
+A partial run is labelled as such in its output and its result file (`scope`), and does not count for a release. A release needs a complete run of the whole suite (`npm run eval`).
 
 ### CI
 
@@ -643,7 +661,7 @@ Phase 5 built documentation search, the response checker and the evaluation suit
 | --- | --- | --- |
 | Documentation search | `CloudflareDocsSearch` posts one `tools/call` request to `https://docs.mcp.cloudflare.com/mcp` and reads the server-sent reply. Up to three pages, each cut to a 400-character excerpt, and only pages on `developers.cloudflare.com`. | Section 5 says to connect with the SDK's `addMcpServer`. A direct request is the same protocol with no connection to keep alive across the agent's sleep and wake, and it is tested by replaying the server's real response. The server needs no session or credentials. |
 | Tool | `searchCloudflareDocs`. Its result carries the instruction to label a documentation-based cause as speculation and to use only the links given. | The model is told to call it only when no cause was found or the owner asks how something is billed. |
-| Response checker | `src/domain/grounding.ts`, run from `onChatResponse` on every reply. It checks figures (G-1), links (G-7), the speculation label on documentation links (G-3) and that no cause is offered when none was found (G-4). | A breach is written to `audit_log` and a fixed notice is added to the chat. The reply has already been shown, so it is corrected, not withdrawn. |
+| Response checker | `src/domain/grounding.ts`, run from `onChatResponse` on every reply (since moved into the response stream; see "Held replies and cheaper evaluations"). It checks figures (G-1), links (G-7), the speculation label on documentation links (G-3) and that no cause is offered when none was found (G-4). | A breach is written to `audit_log` and a fixed notice is added to the chat. The reply has already been shown, so it is corrected, not withdrawn. |
 | Figures checked | Dollar amounts, percentages, dates, months, numbers with a thousands separator, and decimals. Small whole numbers are not checked. An amount or percentage may drop its trailing zeros. Figures from the owner's own message may be repeated. | Whole numbers under 1,000 are too often words ("2 days") to check without false alarms. |
 | Causal phrases | "because", "due to", "likely", "probably", "caused by", "possibly", "perhaps", "may be", "might be", "could be". | As section 7 says, this is a heuristic. The first evaluation run showed it also catches harmless wording, which the tool's instruction now steers the model away from. |
 | Scenario | `injected-text`: a zone whose name is an instruction to the assistant. | Used by the evaluation suite; also selectable in the UI. |
@@ -695,6 +713,19 @@ Phase 5 built documentation search, the response checker and the evaluation suit
 - The evaluation suite is the largest single use of the allowance, about 2,500 neurons for a clean run. It should not be run on a day when a deploy is planned until the enforced window is understood.
 
 **Phase 5 deployment status.** Merged to `main`. Uploaded to staging but not verified: no smoke run has passed there. Not in production. The `deployed/phase-5` tag does not exist.
+
+### Held replies and cheaper evaluations (2026-10-05)
+
+Built after the first evaluation run showed the model stating a figure and a link that no tool had returned. Decided by the owner: correctness of a reply matters more than seeing it appear word by word.
+
+| Item | What was built | Notes |
+| --- | --- | --- |
+| Held replies | Section 7. `holdTextUntilChecked` in `src/domain/verified-stream.ts`; `checkedResponse` in `src/services/grounding-service.ts`; `onChatMessage` returns it. | Replaces the notice added after the reply. `GROUNDING_NOTICE` and the check in `onChatResponse` are removed; `onChatResponse` keeps only the line for an empty reply. |
+| Pending line | `src/app.tsx` shows "Checking this answer against your account data…" while a turn is in progress. | Not yet seen in a browser. |
+| Shorter prompt | The system prompt no longer repeats what each tool is for; that is in the tool descriptions, which were shortened too. One rule ("call the documentation search only when…") moved to that tool's description. | Fixed text sent with every model step fell from 3,425 to 2,042 characters, about 350 tokens or 9 neurons a step. Against the 200 neurons a turn is budgeted at, that is nearer 10% for a two- or three-step turn than the 20 to 30% first estimated. The rest of a turn's input is tool results. |
+| Affected cases only | Section 10. `evals/select.ts`, `--changed` and a comma-separated `--only` in `scripts/eval.mjs`. | The runner also counts withheld replies. A withheld reply passes a grounding case that only forbids something, since nothing unverified reached the owner, and fails any case that requires content. |
+
+**Not verified against the real model.** None of this has been run with Llama 3.3: the account's model allowance was exhausted, and no model call was made for this change. The tests use a scripted model. Three things are therefore unknown until the next evaluation run: whether the shorter prompt changes the model's behaviour, how often replies are withheld, and the real neuron saving. The change to the prompt touches every case, so that run must be the whole suite.
 
 ### Checked against ECC skills
 

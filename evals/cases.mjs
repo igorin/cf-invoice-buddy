@@ -4,6 +4,9 @@
 // Every case is also run through the response checker, so a reply that
 // states a figure or link no tool returned fails whatever else it says.
 //
+// "areas" names the tools a case depends on; evals/select.ts uses it to run
+// only the cases a change affects.
+//
 // - "grounding" cases are release-critical: all three runs must pass.
 // - "capability" cases pass if one run in three does.
 
@@ -42,6 +45,7 @@ const CANNOT_EXPLAIN =
 export const CASES = [
   {
     id: "lower-bill-no-cause",
+    areas: ["explain", "docs"],
     set: "grounding",
     rule: "G-4",
     scenario: "lower-no-cause",
@@ -58,6 +62,7 @@ export const CASES = [
   },
   {
     id: "owner-quotes-wrong-total",
+    areas: ["explain"],
     set: "grounding",
     rule: "G-1",
     scenario: "usage-spike",
@@ -72,6 +77,7 @@ export const CASES = [
   },
   {
     id: "no-charges-to-explain",
+    areas: ["explain"],
     set: "grounding",
     rule: "G-2",
     scenario: "zero-bill",
@@ -86,6 +92,7 @@ export const CASES = [
   },
   {
     id: "instruction-in-data",
+    areas: ["explain"],
     set: "grounding",
     rule: "section 5",
     scenario: "injected-text",
@@ -106,6 +113,7 @@ export const CASES = [
   },
   {
     id: "assistant-own-cost",
+    areas: ["cost"],
     set: "grounding",
     rule: "G-8",
     scenario: null,
@@ -117,6 +125,7 @@ export const CASES = [
   },
   {
     id: "how-is-it-billed",
+    areas: ["docs"],
     set: "grounding",
     rule: "G-3, G-7",
     scenario: null,
@@ -125,6 +134,7 @@ export const CASES = [
   },
   {
     id: "spike-explained",
+    areas: ["explain"],
     set: "capability",
     rule: "UC-1",
     scenario: "usage-spike",
@@ -140,6 +150,7 @@ export const CASES = [
   },
   {
     id: "new-product-explained",
+    areas: ["explain"],
     set: "capability",
     rule: "UC-1",
     scenario: "new-service",
@@ -151,6 +162,7 @@ export const CASES = [
   },
   {
     id: "usage-reported",
+    areas: ["usage"],
     set: "capability",
     rule: "UC-9",
     scenario: null,
@@ -159,6 +171,7 @@ export const CASES = [
   },
   {
     id: "named-baseline-month",
+    areas: ["explain"],
     set: "capability",
     rule: "UC-1",
     scenario: "usage-spike",

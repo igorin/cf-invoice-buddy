@@ -151,7 +151,7 @@ These rules apply to every answer. They are the main product requirement.
 
 1. Causes are produced by deterministic detectors in code, each returning structured evidence. The model receives findings; it does not derive them.
 2. The UI renders the breakdown and the findings directly from the tool result, so the facts on screen do not pass through the model.
-3. After each response, a checker compares the numbers and links in the model's text with the turn's tool results. A mismatch is logged and a visible correction notice is added to the chat.
+3. The model's text is held back until a checker has compared its numbers and links with the turn's tool results. Cards appear as the tools finish; the text appears whole once it passes. Text that fails is never shown: the owner gets a fixed line saying no verifiable answer could be produced, and the failure is logged.
 4. An evaluation suite (NFR-T5) tests the rules against the real model, including cases where the only correct answer is "I cannot explain this".
 
 ## 5. Edge cases
@@ -228,7 +228,7 @@ Drafting a credit request is a short, deterministic task with no waiting, so it 
 | NFR-T2 | Line, branch, function and statement coverage are each at least 80% overall, enforced in CI. |
 | NFR-T3 | The pure domain code (detectors, money arithmetic, reconciliation, the grounding checker) is at least 95% on all four measures. |
 | NFR-T4 | Three layers: unit tests for domain code; integration tests that run the agent and the workflow inside the Workers runtime with a mocked model; end-to-end browser tests for UC-1, UC-3, UC-6, UC-9 and UC-10. |
-| NFR-T5 | Grounding evaluations run against the real model before each release. Cases where fabrication is possible must pass in three of three runs. Capability cases must pass in at least one of three runs for 90% of cases. |
+| NFR-T5 | Grounding evaluations run against the real model before each release. Cases where fabrication is possible must pass in three of three runs. Capability cases must pass in at least one of three runs for 90% of cases. Between releases, a change runs only the cases it can affect; only a run of the whole suite counts for a release. |
 | NFR-T6 | No skipped tests on the main branch. Unit tests finish in under 30 seconds. Tests are independent and build their own data. |
 
 ### TypeScript code quality
@@ -252,7 +252,7 @@ Drafting a credit request is a short, deterministic task with no waiting, so it 
 | NFR-S4 | All SQL is parameterized. The Worker exposes no unauthenticated route. |
 | NFR-S5 | Every close approval or rejection, every credit draft and every owner-reported outcome is written to an append-only audit table. |
 | NFR-O1 | Workflow steps are idempotent. A retried step does not write a second snapshot or close a period twice. |
-| NFR-O2 | The first token of a chat answer streams within 5 seconds at the median (target, measured in the evaluation run). |
+| NFR-O2 | The first visible response to a chat message, a card or the "checking" line, appears within 5 seconds at the median (target, measured in the evaluation run). Answer text is held until it has been checked, so it arrives whole at the end of the turn. |
 | NFR-O3 | The daily neuron budget (UC-8) is enforced in code before each model call. |
 | NFR-O4 | The project stays inside Cloudflare's free tier. The binding limit is Workers AI: 10,000 neurons a day for the whole account. The budgets of every agent instance in every environment add up to no more than 9,000, enforced by a test. Budgets are counted over the trailing 24 hours, which is never looser than the calendar day Cloudflare documents and matches the refusals observed. |
 | NFR-O5 | A chat turn that is going in circles is detected and stopped: two failed tool calls in a row, or the same call made a third time. A turn is at most five model steps. A turn that ends with nothing to show gets a fixed message. |

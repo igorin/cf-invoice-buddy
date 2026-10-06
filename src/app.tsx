@@ -612,6 +612,14 @@ function Chat({ accountId }: { accountId: string }) {
             );
           })}
 
+          {/* Text is held until it has been checked (spec section 7). */}
+          {isStreaming && (
+            <output className="flex items-center gap-2 text-sm text-kumo-inactive">
+              <GearIcon size={14} className="animate-spin" />
+              Checking this answer against your account data…
+            </output>
+          )}
+
           <div ref={messagesEndRef} />
         </div>
       </div>
