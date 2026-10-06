@@ -1,3 +1,6 @@
+// Template for the Wrangler configuration. Copy it to wrangler.jsonc, which
+// git ignores, and change what your account needs; see README, "Setting up
+// Wrangler". It holds no secrets: those are in .dev.vars and .secrets/.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "cf-invoice-buddy",

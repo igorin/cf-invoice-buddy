@@ -50,6 +50,8 @@ The starter pins older versions than the current releases. The project runs on t
 
 ### `wrangler.jsonc`
 
+The file is not in git (since 2026-10-06). The repository holds `wrangler.example.jsonc`, with the content below; each developer copies it to `wrangler.jsonc`, which `.gitignore` excludes. CI makes the same copy before it runs. The deploy script needs the local file and says so when it differs from the template, because a deploy now takes its configuration from outside the commit it deploys.
+
 ```jsonc
 {
   "$schema": "node_modules/wrangler/config-schema.json",
@@ -726,6 +728,18 @@ Built after the first evaluation run showed the model stating a figure and a lin
 | Affected cases only | Section 10. `evals/select.ts`, `--changed` and a comma-separated `--only` in `scripts/eval.mjs`. | The runner also counts withheld replies. A withheld reply passes a grounding case that only forbids something, since nothing unverified reached the owner, and fails any case that requires content. |
 
 **Not verified against the real model.** None of this has been run with Llama 3.3: the account's model allowance was exhausted, and no model call was made for this change. The tests use a scripted model. Three things are therefore unknown until the next evaluation run: whether the shorter prompt changes the model's behaviour, how often replies are withheld, and the real neuron saving. The change to the prompt touches every case, so that run must be the whole suite.
+
+### Wrangler configuration moved out of git (2026-10-06)
+
+Decided by the owner. `wrangler.jsonc` was renamed to `wrangler.example.jsonc` and `wrangler.jsonc` (with `wrangler.json` and `wrangler.toml`) added to `.gitignore`. The README has the setup steps.
+
+| Affected | Change |
+| --- | --- |
+| CI | Copies the template to `wrangler.jsonc` after `npm ci`. Tests, the build and the deploy dry run read it there. |
+| Budget test | `test/unit/free-tier.test.ts` checks the template and, when present, the local file. |
+| Deploy script | Fails when `wrangler.jsonc` is missing; prints a note when it differs from the template. |
+| Deploy guarantee | Before, a deploy's configuration was part of the merged commit. Now budgets, Worker names and variables come from a local file that no review or CI run has seen. The note above and the budget test on the local file are the only checks. |
+| History | Earlier versions of `wrangler.jsonc` remain in the repository's history. They never held secrets or account identifiers. |
 
 ### Checked against ECC skills
 

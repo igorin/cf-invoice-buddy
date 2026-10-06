@@ -148,6 +148,11 @@ vite.config.ts.timestamp-*
 # Turbo Repo
 .turbo
 
+# The Wrangler configuration is local: copy wrangler.example.jsonc.
+wrangler.jsonc
+wrangler.json
+wrangler.toml
+
 # Cloudflare local secrets and tool state
 .dev.vars
 .dev.vars.*
