@@ -1,3 +1,6 @@
+// Template for the Wrangler configuration. Copy it to wrangler.jsonc, which
+// git ignores, and change what your account needs; see README, "Setting up
+// Wrangler". It holds no secrets: those are in .dev.vars and .secrets/.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "cf-invoice-buddy",
@@ -51,9 +54,12 @@
         "DAILY_NEURON_BUDGET": "400",
         "SMOKE_DAILY_NEURON_BUDGET": "1000",
         "AUTH_MODE": "access",
-        // The smoke-test instance reaches the model through this AI Gateway,
-        // whose cache serves a repeated smoke turn (spec section 10).
-        "AI_GATEWAY_ID": "invoice-buddy-smoke"
+        // Optional, for cheaper testing (spec section 10); empty means off.
+        // AI_GATEWAY_ID: the name of an AI Gateway in your account with
+        // caching on, used by the smoke-test instance only.
+        // SMOKE_MODEL_ID: a cheaper model for the smoke-test instance.
+        "AI_GATEWAY_ID": "",
+        "SMOKE_MODEL_ID": ""
       }
     },
     "production": {
@@ -69,9 +75,12 @@
         "DAILY_NEURON_BUDGET": "3000",
         "SMOKE_DAILY_NEURON_BUDGET": "600",
         "AUTH_MODE": "access",
-        // The smoke-test instance reaches the model through this AI Gateway,
-        // whose cache serves a repeated smoke turn (spec section 10).
-        "AI_GATEWAY_ID": "invoice-buddy-smoke"
+        // Optional, for cheaper testing (spec section 10); empty means off.
+        // AI_GATEWAY_ID: the name of an AI Gateway in your account with
+        // caching on, used by the smoke-test instance only.
+        // SMOKE_MODEL_ID: a cheaper model for the smoke-test instance.
+        "AI_GATEWAY_ID": "",
+        "SMOKE_MODEL_ID": ""
       }
     }
   }

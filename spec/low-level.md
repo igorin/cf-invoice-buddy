@@ -50,6 +50,8 @@ The starter pins older versions than the current releases. The project runs on t
 
 ### `wrangler.jsonc`
 
+The file is not in git (since 2026-10-06). The repository holds `wrangler.example.jsonc`, with the content below; each developer copies it to `wrangler.jsonc`, which `.gitignore` excludes. CI makes the same copy before it runs. The deploy script needs the local file and says so when it differs from the template, because a deploy now takes its configuration from outside the commit it deploys.
+
 ```jsonc
 {
   "$schema": "node_modules/wrangler/config-schema.json",
@@ -757,7 +759,18 @@ On branch `experiment/cheaper-testing`, not merged. Prompted by research into te
 3. Whether the cheaper model calls tools reliably enough for the smoke test's turn. If it does not, it would fail deploys and roll production back for no fault of the build.
 4. Whether recordings of real turns replay cleanly. A reply that quotes the assistant's own usage will not, because that figure differs on each run.
 
-Known costs: a cached smoke turn no longer proves the model answered for that deploy; with the cheaper model the smoke test no longer exercises the chat model at all; the cost meter counts a cached turn's tokens as if they were billed. The owner created the gateway `invoice-buddy-smoke` in the account on 2026-10-06, and `AI_GATEWAY_ID` is set to it for staging and production on this branch only. `SMOKE_MODEL_ID` is left unset until a live call shows the cheaper model calls tools. Nothing from this branch is deployed.
+Known costs: a cached smoke turn no longer proves the model answered for that deploy; with the cheaper model the smoke test no longer exercises the chat model at all; the cost meter counts a cached turn's tokens as if they were billed. The owner created the gateway `invoice-buddy-smoke` in the account on 2026-10-06. Since the Wrangler configuration left git, `AI_GATEWAY_ID` is empty in the template and set to that name only in the owner's local `wrangler.jsonc`, for staging and production. `SMOKE_MODEL_ID` is left unset until a live call shows the cheaper model calls tools. Nothing from this branch is deployed.
+### Wrangler configuration moved out of git (2026-10-06)
+
+Decided by the owner. `wrangler.jsonc` was renamed to `wrangler.example.jsonc` and `wrangler.jsonc` (with `wrangler.json` and `wrangler.toml`) added to `.gitignore`. The README has the setup steps.
+
+| Affected | Change |
+| --- | --- |
+| CI | Copies the template to `wrangler.jsonc` after `npm ci`. Tests, the build and the deploy dry run read it there. |
+| Budget test | `test/unit/free-tier.test.ts` checks the template and, when present, the local file. |
+| Deploy script | Fails when `wrangler.jsonc` is missing; prints a note when it differs from the template. |
+| Deploy guarantee | Before, a deploy's configuration was part of the merged commit. Now budgets, Worker names and variables come from a local file that no review or CI run has seen. The note above and the budget test on the local file are the only checks. |
+| History | Earlier versions of `wrangler.jsonc` remain in the repository's history. They never held secrets or account identifiers. |
 
 ### Checked against ECC skills
 
