@@ -90,7 +90,7 @@ describe("cost meter in the agent (UC-8)", () => {
     });
     expect(rows[0]?.neurons).toBeCloseTo(15.496, 3);
     expect(state.selfCost.monthCostMicros).toBe(170);
-    expect(state.selfCost.todayNeurons).toBeCloseTo(15.496, 3);
+    expect(state.selfCost.windowNeurons).toBeCloseTo(15.496, 3);
     expect(state.selfCost.dailyBudgetNeurons).toBe(
       Number(env.DAILY_NEURON_BUDGET)
     );
@@ -126,6 +126,35 @@ describe("daily budget (NFR-O3)", () => {
     expect(model.doStreamCalls).toHaveLength(0);
     expect(rows).toHaveLength(1);
     expect(lastText).toBe(BUDGET_EXHAUSTED_MESSAGE);
+  });
+});
+
+describe("budget window (free-tier limit)", () => {
+  const hoursAgo = (hours: number) =>
+    new Date(Date.now() - hours * 3_600_000).toISOString();
+
+  async function withUsageAt(name: string, at: string) {
+    InvoiceBuddyAgent.modelFactory = () => mockModel(10, 1);
+    const stub = await getAgentByName(env.InvoiceBuddyAgent, name);
+    await runInDurableObject(stub, async (agent: InvoiceBuddyAgent) => {
+      agent.sql`
+        INSERT INTO self_usage (at, model, steps, input_tokens, output_tokens, neurons, cost_micros, metered)
+        VALUES (${at}, 'm', 1, 1, 1, 10000, 110000, 1)`;
+    });
+    return sendTurn(name);
+  }
+
+  // Cloudflare refused calls on 2026-10-06 over usage made the day before,
+  // so yesterday's usage must still count against the budget.
+  it("counts usage from 23 hours ago, even though it was yesterday", async () => {
+    const { lastText } = await withUsageAt("window-23h", hoursAgo(23));
+    expect(lastText).toBe(BUDGET_EXHAUSTED_MESSAGE);
+  });
+
+  it("no longer counts usage from 25 hours ago", async () => {
+    const { lastText, state } = await withUsageAt("window-25h", hoursAgo(25));
+    expect(lastText).toBe("ok");
+    expect(state.selfCost.windowNeurons).toBeLessThan(100);
   });
 });
 

@@ -62,7 +62,7 @@ function gradeGrounding(turn, question) {
 
 async function runOnce(item) {
   const budget = meter();
-  if (budget.todayNeurons + TURN_NEURON_ESTIMATE > budget.dailyBudgetNeurons) {
+  if (budget.windowNeurons + TURN_NEURON_ESTIMATE > budget.dailyBudgetNeurons) {
     throw new Error("the instance's daily neuron budget would be passed");
   }
   await agent.call(
@@ -89,7 +89,7 @@ async function runOnce(item) {
   };
 }
 
-const startNeurons = meter().todayNeurons;
+const startNeurons = meter().windowNeurons;
 const results = [];
 let stopped = null;
 
@@ -123,7 +123,7 @@ for (const item of cases) {
 }
 
 await agent.call("setDataMode", ["live"]).catch(() => {});
-const neurons = Math.round(meter().todayNeurons - startNeurons);
+const neurons = Math.round(meter().windowNeurons - startNeurons);
 agent.close();
 
 const of = (set) =>

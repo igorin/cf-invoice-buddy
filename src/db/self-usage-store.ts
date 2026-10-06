@@ -32,8 +32,8 @@ const first = (rows: Iterable<Record<string, unknown>>) => [...rows][0] ?? {};
 export function readCostReport(
   sql: Sql,
   today: IsoDate,
-  neuronsToday: number,
-  dailyBudget: number
+  neuronsInWindow: number,
+  budget: number
 ) {
   const monthStart = isoDate(`${today.slice(0, 7)}-01`);
   const month = first(
@@ -69,9 +69,9 @@ export function readCostReport(
       unmeteredTurns: count(month.unmetered),
       turnsRefusedOverBudget: count(refused.refused)
     },
-    today: {
-      neurons: count(neuronsToday),
-      dailyBudget: `${count(dailyBudget)} neurons`
+    last24Hours: {
+      neurons: count(neuronsInWindow),
+      budget: `${count(budget)} neurons per 24 hours`
     },
     lastDays: [...days].map((day) => ({
       date: String(day.day),
@@ -161,11 +161,22 @@ export function bumpDailyCounter(
   );
 }
 
-export function readNeuronsToday(sql: Sql, today: IsoDate): number {
+/**
+ * Cloudflare documents a daily limit that resets at 00:00 UTC, but on
+ * 2026-10-06 it refused calls when that day's total was about 3,500 and the
+ * trailing 24 hours held about 16,000. The budget is therefore counted over
+ * the trailing 24 hours, which is never looser than the calendar day.
+ */
+export const BUDGET_WINDOW_HOURS = 24;
+const MS_PER_HOUR = 3_600_000;
+
+/** Neurons metered in the trailing budget window ending at `now`. */
+export function readNeuronsInWindow(sql: Sql, now: Date): number {
+  const since = new Date(now.getTime() - BUDGET_WINDOW_HOURS * MS_PER_HOUR);
   const row = first(
     sql.exec(
       "SELECT SUM(neurons) AS total FROM self_usage WHERE at >= ?",
-      today
+      since.toISOString()
     )
   );
   return Number(row.total ?? 0);

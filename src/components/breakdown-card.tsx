@@ -190,7 +190,7 @@ const WARN_SHARE = 0.8;
 
 type SelfCost = {
   monthCostMicros: number;
-  todayNeurons: number;
+  windowNeurons: number;
   dailyBudgetNeurons: number;
   unmeteredTurns: number;
 };
@@ -200,7 +200,7 @@ export function CostFooter({ cost }: { cost: SelfCost | undefined }) {
   if (!cost) return null;
   const share =
     cost.dailyBudgetNeurons > 0
-      ? cost.todayNeurons / cost.dailyBudgetNeurons
+      ? cost.windowNeurons / cost.dailyBudgetNeurons
       : 0;
   const dollars = (cost.monthCostMicros / MICROS_PER_USD).toFixed(4);
   return (
@@ -209,8 +209,8 @@ export function CostFooter({ cost }: { cost: SelfCost | undefined }) {
       title="At list price, before Cloudflare's free daily allocation, which is shared across the account. Model calls only. This is the assistant's meter, not the invoice."
     >
       This assistant: ${dollars} of model usage this month at list price ·{" "}
-      {Math.round(cost.todayNeurons).toLocaleString("en-US")} of{" "}
-      {cost.dailyBudgetNeurons.toLocaleString("en-US")} neurons of today's
+      {Math.round(cost.windowNeurons).toLocaleString("en-US")} of{" "}
+      {cost.dailyBudgetNeurons.toLocaleString("en-US")} neurons of the 24-hour
       budget
       {share >= 1 ? " · budget reached" : ""}
       {cost.unmeteredTurns > 0

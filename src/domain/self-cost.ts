@@ -77,12 +77,12 @@ export function meterTurn(usage: TokenUsage | undefined): MeteredTurn {
   };
 }
 
-/** Compares the day's neurons with the daily budget. */
+/** Compares the neurons used in the budget window with the budget. */
 export function checkBudget(
-  neuronsToday: number,
+  neuronsUsed: number,
   dailyBudgetNeurons: number
 ): BudgetStatus {
-  if (neuronsToday >= dailyBudgetNeurons) return "exhausted";
-  if (neuronsToday >= dailyBudgetNeurons * BUDGET_WARN_RATIO) return "warn";
+  if (neuronsUsed >= dailyBudgetNeurons) return "exhausted";
+  if (neuronsUsed >= dailyBudgetNeurons * BUDGET_WARN_RATIO) return "warn";
   return "ok";
 }

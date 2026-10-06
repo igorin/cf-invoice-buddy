@@ -43,6 +43,7 @@ const DOLLAR_AMOUNT = /-?\$[\d,]+(?:\.\d+)?/g;
 // uses a few hundred; it makes one model turn and is refused when the account or the smoke instance
 // does not clearly have room, so a faulty run can never eat the allowance.
 const ACCOUNT_DAILY_NEURON_LIMIT = 10_000;
+const WINDOW_HOURS = 24;
 const ACCOUNT_NEURON_RESERVE = 2_000;
 const RUN_NEURON_ESTIMATE = 250;
 
@@ -131,10 +132,16 @@ async function followLogs() {
   };
 }
 
-/** The account's Workers AI neurons so far today (UTC), from GraphQL Analytics. */
-async function accountNeuronsToday() {
+/**
+ * The account's Workers AI neurons over the trailing 24 hours, from GraphQL
+ * Analytics. Cloudflare documents a limit that resets at 00:00 UTC, but on
+ * 2026-10-06 it refused calls over usage made the day before, so the check
+ * uses the trailing 24 hours, which is never looser than the calendar day.
+ */
+async function accountNeuronsLast24Hours() {
   const credentials = { ...readEnvFile(".dev.vars"), ...process.env };
-  const today = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const since = new Date(now.getTime() - WINDOW_HOURS * 3_600_000);
   const response = await fetch("https://api.cloudflare.com/client/v4/graphql", {
     method: "POST",
     headers: {
@@ -142,10 +149,14 @@ async function accountNeuronsToday() {
       "content-type": "application/json"
     },
     body: JSON.stringify({
-      query: `query($account: String!, $day: Date!) { viewer { accounts(filter: { accountTag: $account }) {
-        rows: aiInferenceAdaptiveGroups(limit: 100, filter: { date: $day }) { sum { totalNeurons } }
+      query: `query($account: String!, $since: Time!, $until: Time!) { viewer { accounts(filter: { accountTag: $account }) {
+        rows: aiInferenceAdaptiveGroups(limit: 1000, filter: { datetime_geq: $since, datetime_leq: $until }) { sum { totalNeurons } }
       } } }`,
-      variables: { account: credentials.CF_ACCOUNT_ID, day: today }
+      variables: {
+        account: credentials.CF_ACCOUNT_ID,
+        since: since.toISOString(),
+        until: now.toISOString()
+      }
     })
   });
   const body = await response.json();
@@ -157,14 +168,14 @@ async function accountNeuronsToday() {
 }
 
 try {
-  const used = await accountNeuronsToday();
+  const used = await accountNeuronsLast24Hours();
   const ceiling = ACCOUNT_DAILY_NEURON_LIMIT - ACCOUNT_NEURON_RESERVE;
   console.log(
-    `Account neurons today: ${Math.round(used).toLocaleString("en-US")} of ${ACCOUNT_DAILY_NEURON_LIMIT.toLocaleString("en-US")} free`
+    `Account neurons in the last ${WINDOW_HOURS} hours: ${Math.round(used).toLocaleString("en-US")} of ${ACCOUNT_DAILY_NEURON_LIMIT.toLocaleString("en-US")} free`
   );
   if (used + RUN_NEURON_ESTIMATE > ceiling) {
     fail(
-      `Smoke test not run: it would take the account past ${ceiling.toLocaleString("en-US")} neurons today. The allowance resets at 00:00 UTC.`
+      `Smoke test not run: the account would pass ${ceiling.toLocaleString("en-US")} neurons in ${WINDOW_HOURS} hours. Room frees up as earlier usage passes the ${WINDOW_HOURS}-hour mark.`
     );
   }
 } catch (error) {
@@ -339,8 +350,8 @@ await check(
       const before = agent.states.at(-1)?.selfCost;
       expect(before, "no meter state received");
       expect(
-        before.todayNeurons + RUN_NEURON_ESTIMATE <= before.dailyBudgetNeurons,
-        `the smoke instance has used ${Math.round(before.todayNeurons)} of its ${before.dailyBudgetNeurons} neurons today; no model call made`
+        before.windowNeurons + RUN_NEURON_ESTIMATE <= before.dailyBudgetNeurons,
+        `the smoke instance has used ${Math.round(before.windowNeurons)} of its ${before.dailyBudgetNeurons} neurons in the last 24 hours; no model call made`
       );
       const {
         text,
@@ -385,7 +396,7 @@ await check(
       );
       expect(after, "no meter state received after the turn");
       expect(
-        after.todayNeurons > before.todayNeurons,
+        after.windowNeurons > before.windowNeurons,
         "the turn was not metered"
       );
       expect(
@@ -393,7 +404,7 @@ await check(
         "the turn was recorded as unmetered"
       );
       console.log(
-        `  ${amounts.length} amounts stated, all from the tool result; labelled as test data; meter: ${before.todayNeurons.toFixed(2)} → ${after.todayNeurons.toFixed(2)} neurons today`
+        `  ${amounts.length} amounts stated, all from the tool result; labelled as test data; meter: ${before.windowNeurons.toFixed(2)} → ${after.windowNeurons.toFixed(2)} neurons in 24 hours`
       );
     } finally {
       await agent.call("setDataMode", ["live"]);
