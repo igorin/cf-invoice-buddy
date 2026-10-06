@@ -654,6 +654,35 @@ Phase 5 built documentation search, the response checker and the evaluation suit
 | Smoke test | One more check, with no model call: the documentation search returns pages, all on `developers.cloudflare.com`. | Nine checks, one model turn. |
 | Shared client | The agent WebSocket client moved from the smoke test to `scripts/agent-client.mjs`, used by both the smoke test and the evaluation runner. | |
 
+### The free allowance ran out again (2026-10-06)
+
+**What happened.** At about 00:30 UTC on 2026-10-06 Cloudflare began refusing every model call, in production, staging and local development, with error 4006: "you have used up your daily free allocation of 10,000 neurons". The phase 5 staging deploy failed its smoke test on that, and a production chat turn fails the same way. Production still runs phase 4.
+
+**Why it was not expected.** Cloudflare's own analytics show 3,498 neurons for 2026-10-06 at that moment, and the app's meters agree (about 3,300 for the evaluation runs, about 200 for the phase 4 deploys). By the per-UTC-day figure the account had used a little over a third of the allowance.
+
+| Hour (UTC) | Requests | Neurons |
+| --- | --- | --- |
+| 2026-10-05 02:00 | 5 | 28 |
+| 2026-10-05 03:00 | 26 | 283 |
+| 2026-10-05 04:00 | 186 | 12,557 |
+| 2026-10-05 06:00 | 1 | 71 |
+| 2026-10-06 00:00 | 68 | 3,498 |
+
+**What is and is not established.**
+
+- Established: the limit Cloudflare enforces is not the per-UTC-day total its analytics report. On 2026-10-05 calls were still answered more than an hour after that day's total passed 10,000; on 2026-10-06 calls were refused at about 3,500.
+- Not established: what window Cloudflare does use, and so when calls will resume. The figures fit a window that still includes the 12,557 neurons of 04:00 UTC on 2026-10-05, applied with a delay, but that is a guess. The pricing page says limits reset daily at 00:00 UTC.
+
+**Consequences for the guards.** The per-instance budgets and the smoke pre-flight check both rest on the per-UTC-day figure, so neither can promise that a model call will be accepted. They still cap what the app spends. NFR-O4 holds in the sense that nothing is billed: on the free plan an exhausted allowance means refused calls, not charges.
+
+**Changes made.**
+
+- A refused call now gives the owner a clear line ("Cloudflare's free daily allowance of model usage for this account is used up…") where it gave "An error occurred.", and the error is logged.
+- The smoke test names this cause when it meets it and says the deploy is not at fault.
+- The evaluation suite is the largest single use of the allowance, about 2,500 neurons for a clean run. It should not be run on a day when a deploy is planned until the enforced window is understood.
+
+**Phase 5 deployment status.** Merged to `main`. Uploaded to staging but not verified: no smoke run has passed there. Not in production. The `deployed/phase-5` tag does not exist.
+
 ### Checked against ECC skills
 
 | Skill | Applied as |

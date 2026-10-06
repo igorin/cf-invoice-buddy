@@ -7,7 +7,7 @@ Specs are in [spec/](spec/).
 
 Last updated 2026-10-06. The build follows nine phases set out in [spec/low-level.md](spec/low-level.md), section 15. Each phase must be deployed to Cloudflare and pass a smoke test before the next begins.
 
-**Phases 1 to 4 of 9 are deployed.** They run in staging and production behind Cloudflare Access, and both environments pass the smoke test. Phase 5 is next.
+**Phases 1 to 4 of 9 are deployed.** They run in staging and production behind Cloudflare Access, and both environments pass the smoke test. Phase 5 is merged and uploaded to staging but not yet verified or in production: Cloudflare is refusing model calls for the account until its free daily allowance resets.
 
 | Phase | Scope | Status |
 | --- | --- | --- |
@@ -15,7 +15,7 @@ Last updated 2026-10-06. The build follows nine phases set out in [spec/low-leve
 | 2 | Billing domain logic: money, periods, breakdowns, anomaly detectors | Deployed. The logic is tested but not yet used by the agent |
 | 3 | Usage data, usage summary panel, test mode | Deployed |
 | 4 | Bill explanations and the assistant's cost report | Deployed |
-| 5 | Documentation search and grounding checks | Not started |
+| 5 | Documentation search and grounding checks | Code complete and merged; deploy waiting on the model allowance |
 | 6 | Credit request drafts | Not started |
 | 7 | Monthly invoice close | Not started |
 | 8 | Plan comparison | Not started |

@@ -342,12 +342,19 @@ await check(
         before.todayNeurons + RUN_NEURON_ESTIMATE <= before.dailyBudgetNeurons,
         `the smoke instance has used ${Math.round(before.todayNeurons)} of its ${before.dailyBudgetNeurons} neurons today; no model call made`
       );
-      const { text, tools } = await agent.ask(
-        "Why is my bill higher than usual?"
-      );
+      const {
+        text,
+        tools,
+        error: turnError
+      } = await agent.ask("Why is my bill higher than usual?");
       const after = agent.states.at(-1)?.selfCost;
       // The reply holds fixture figures only, so it is safe to print.
       const show = (problem) => `${problem}. Reply was: ${text.slice(0, 400)}`;
+      expect(
+        !turnError || !/free daily allowance/i.test(turnError),
+        "Cloudflare refused the model call: the account's free daily allowance is used up. Nothing is wrong with the deploy; it cannot be verified until Cloudflare resets the allowance"
+      );
+      expect(!turnError, `the turn failed: ${turnError}`);
       expect(text.trim().length > 0, "empty reply");
       expect(
         tools.includes("explainBillChange"),

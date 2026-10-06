@@ -51,3 +51,31 @@ export function hasVisibleReply(message: UIMessage): boolean {
       ("state" in part && part.state === "approval-requested")
   );
 }
+
+/** Shown when Cloudflare refuses a model call because the free allowance is spent. */
+export const ALLOWANCE_EXHAUSTED_MESSAGE =
+  "Cloudflare's free daily allowance of model usage for this account is used up, so I can't answer right now. The usage summary still works. Cloudflare resets the allowance daily.";
+
+export const TURN_FAILED_MESSAGE =
+  "Something went wrong while answering. Please try again.";
+
+// Workers AI error 4006, as returned on 2026-10-06: "you have used up your
+// daily free allocation of 10,000 neurons".
+const ALLOWANCE_ERROR = /\b4006\b|daily free allocation/i;
+
+/** Turns a failed model call into a line the owner can act on. */
+export function describeTurnError(message: string): string {
+  return ALLOWANCE_ERROR.test(message)
+    ? ALLOWANCE_EXHAUSTED_MESSAGE
+    : TURN_FAILED_MESSAGE;
+}
+
+/**
+ * The stream's error handler. Without it the owner sees only "An error
+ * occurred." and nothing is logged. The message is logged, never the request.
+ */
+export function reportTurnError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error("Chat turn failed:", message.slice(0, 300));
+  return describeTurnError(message);
+}
