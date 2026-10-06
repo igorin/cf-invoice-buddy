@@ -52,7 +52,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
     "@vitest/coverage-istanbul": "^4.1.11",
-    "oxfmt": "^0.56.0",
+    "oxfmt": "^0.72.0",
     "oxlint": "^1.71.0",
     "tailwindcss": "^4.3.1",
     "typescript": "^6.0.3",
