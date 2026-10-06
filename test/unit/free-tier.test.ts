@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { LLAMA_3_3_PRICE } from "../../src/domain/self-cost";
 
@@ -17,8 +17,13 @@ function budgetsIn(config: string): number[] {
   return [...config.matchAll(pattern)].map((match) => Number(match[1]));
 }
 
-describe("daily neuron budgets", () => {
-  const budgets = budgetsIn(readFileSync("wrangler.jsonc", "utf8"));
+// The committed template, and the local configuration that deploys use.
+const CONFIG_FILES = ["wrangler.example.jsonc", "wrangler.jsonc"].filter(
+  (file) => existsSync(file)
+);
+
+describe.each(CONFIG_FILES)("daily neuron budgets in %s", (file) => {
+  const budgets = budgetsIn(readFileSync(file, "utf8"));
 
   it("are set for the owner and smoke instances of all three environments", () => {
     expect(budgets).toHaveLength(6);

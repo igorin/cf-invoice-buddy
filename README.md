@@ -74,7 +74,7 @@ A response with `"success": true` means the permission works, even if the result
 
 ### Give the token to the app
 
-Locally, put it in `.dev.vars` next to the Wrangler configuration. The file must be .gitignored.
+Locally, put it in `.dev.vars` next to the Wrangler configuration, as described under "Setting up Wrangler" below. The file must be .gitignored.
 
 ```
 CF_ACCOUNT_ID=<your account id>
@@ -87,10 +87,54 @@ For a deployed environment, put it in that environment's secrets file, described
 
 Cloudflare has a newer usage endpoint (`/accounts/{id}/billable/usage`) that reports daily usage including free-tier amounts. It is marked alpha and restricted. A token with the permissions above may still get a 403 from it; access is granted by Cloudflare, not by a token setting.
 
+## Setting up Wrangler
+
+Wrangler is Cloudflare's command-line tool. It is installed with the project's other dependencies, so there is nothing to install globally. Its configuration file, `wrangler.jsonc`, is not in the repository and must be .gitignored: you create your own from the template.
+
+1. Install the dependencies, which include Wrangler:
+
+   ```sh
+   npm install
+   ```
+
+2. Sign in to the Cloudflare account the app will run in, and check which account Wrangler sees:
+
+   ```sh
+   npx wrangler login
+   npx wrangler whoami
+   ```
+
+   The login opens a browser. It is used for deploying and for local development; the app itself reads usage and billing with the API token described above, not with this login.
+
+3. Create your configuration from the template:
+
+   ```sh
+   cp wrangler.example.jsonc wrangler.jsonc
+   ```
+
+4. Edit `wrangler.jsonc` if your account needs it:
+
+   | Setting | When to change it |
+   | --- | --- |
+   | `name` at the top and under `env.staging` and `env.production` | The Worker names, which become the `workers.dev` hostnames. If you change them, change `WORKER_NAMES` in `scripts/lib.mjs` to match. |
+   | `DAILY_NEURON_BUDGET`, `SMOKE_DAILY_NEURON_BUDGET` | The model budget of each environment. The six values must add up to no more than 9,000; a test checks this. |
+   | `compatibility_date` | Only when upgrading the Workers runtime. |
+
+   Do not put secrets in this file. They go in `.dev.vars` for local development and in `.secrets/` for deployed environments, both described in this README.
+
+5. Regenerate the binding types after any change to the file:
+
+   ```sh
+   npm run types
+   ```
+
+6. Put your account ID and API token in `.dev.vars`, next to `wrangler.jsonc`, as described under "Give the token to the app" above.
+
+When a change to the configuration is meant for everyone, make it in `wrangler.example.jsonc` as well, since that is the file in git and the one CI uses.
+
 ## Developing
 
 ```sh
-npm install
 npm run dev            # local app against the real model; see the note below
 npm run check          # format, lint, type check
 npm run test:coverage  # unit and integration tests with coverage thresholds
@@ -102,11 +146,11 @@ Local development reaches the real model through the production Worker's hostnam
 
 ### Staying inside the free tier
 
-The app runs on Cloudflare's free plan, where Workers AI allows 10,000 neurons a day for the whole account. Each agent instance has a budget in `wrangler.jsonc`, counted over the trailing 24 hours; together they add up to 9,000, and a test fails if that total is raised past the allowance. Cloudflare documents a reset at 00:00 UTC, but it has refused calls over usage from the previous day, so the app counts the trailing 24 hours to be safe. A chat turn that goes in circles is stopped, and the smoke test, which makes one model turn per run, will not run if it would take the account past 8,000 neurons in the trailing 24 hours.
+The app runs on Cloudflare's free plan, where Workers AI allows 10,000 neurons a day for the whole account. Each agent instance has a budget in `wrangler.jsonc` (and in the template, `wrangler.example.jsonc`), counted over the trailing 24 hours; together they add up to 9,000, and a test fails if that total is raised past the allowance. Cloudflare documents a reset at 00:00 UTC, but it has refused calls over usage from the previous day, so the app counts the trailing 24 hours to be safe. A chat turn that goes in circles is stopped, and the smoke test, which makes one model turn per run, will not run if it would take the account past 8,000 neurons in the trailing 24 hours.
 
 ## Deploying
 
-There are two environments, `staging` and `production`. Both are deployed by one script, which builds, deploys, runs a smoke test against the live URL and records the result. It refuses a working tree with uncommitted changes and a commit that is not on `origin/main`. Production also requires that the same commit has passed staging.
+There are two environments, `staging` and `production`. Both are deployed by one script, which builds, deploys, runs a smoke test against the live URL and records the result. It refuses a working tree with uncommitted changes and a commit that is not on `origin/main`. It also needs your `wrangler.jsonc`; because that file is not in git, the script says so when it differs from the template. Production also requires that the same commit has passed staging.
 
 ```sh
 npm run deploy:staging

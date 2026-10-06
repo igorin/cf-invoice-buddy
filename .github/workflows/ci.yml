@@ -21,6 +21,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Wrangler configuration from the template
+        run: cp wrangler.example.jsonc wrangler.jsonc
       - name: Phase gate
         run: npm run gate
       - name: Format, lint and type check

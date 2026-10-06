@@ -1,6 +1,6 @@
 // One deployment path for both environments (spec section 13):
 // guard → build → deploy → smoke → record. Usage: node scripts/deploy.mjs <env>
-import { appendFileSync, existsSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { ENVIRONMENTS, WORKER_NAMES, currentPhase, fail, run } from "./lib.mjs";
 
 const [environment, ...flags] = process.argv.slice(2);
@@ -17,6 +17,8 @@ if (!ENVIRONMENTS.includes(environment)) {
 
 const secretsFile = `.secrets/${environment}.env`;
 const DEPLOYMENT_RECORD = "spec/deployments.md";
+const WRANGLER_CONFIG = "wrangler.jsonc";
+const WRANGLER_TEMPLATE = "wrangler.example.jsonc";
 const inherit = { stdio: "inherit" };
 
 function guard() {
@@ -33,6 +35,16 @@ function guard() {
     run("git", ["merge-base", "--is-ancestor", "HEAD", "origin/main"]);
   } catch {
     fail("HEAD is not on origin/main. Only merged commits are deployed.");
+  }
+  if (!existsSync(WRANGLER_CONFIG)) {
+    fail(`Missing ${WRANGLER_CONFIG}. See README, "Setting up Wrangler".`);
+  }
+  // The configuration is not in git, so say when it is not the template's.
+  if (
+    readFileSync(WRANGLER_CONFIG, "utf8") !==
+    readFileSync(WRANGLER_TEMPLATE, "utf8")
+  ) {
+    console.log(`Note: ${WRANGLER_CONFIG} differs from ${WRANGLER_TEMPLATE}.`);
   }
   if (!dryRun && !existsSync(secretsFile)) {
     fail(`Missing ${secretsFile}. See README, "Deploying".`);
