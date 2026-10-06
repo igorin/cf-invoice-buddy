@@ -44,7 +44,7 @@ import {
   bumpDailyCounter,
   readCostReport,
   readMonthCost,
-  readNeuronsToday,
+  readNeuronsInWindow,
   recordTurn,
   type CostReport
 } from "./db/self-usage-store";
@@ -75,11 +75,11 @@ export const NO_ANSWER_MESSAGE =
   "I couldn't complete that answer. Please try asking again, or rephrase the question.";
 
 export const BUDGET_EXHAUSTED_MESSAGE =
-  "Today's usage budget for this assistant is used up. It resets at 00:00 UTC.";
+  "This assistant's usage budget for the last 24 hours is used up. It frees up as earlier usage passes the 24-hour mark.";
 
 export type SelfCost = Readonly<{
   monthCostMicros: number;
-  todayNeurons: number;
+  windowNeurons: number;
   dailyBudgetNeurons: number;
   unmeteredTurns: number;
 }>;
@@ -111,7 +111,7 @@ const SYNC_CRON = "0 */6 * * *";
 const INITIAL_STATE: AgentState = {
   selfCost: {
     monthCostMicros: 0,
-    todayNeurons: 0,
+    windowNeurons: 0,
     dailyBudgetNeurons: 0,
     unmeteredTurns: 0
   },
@@ -148,7 +148,9 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
     options?: OnChatMessageOptions
   ) {
     // The budget is enforced in code before any model call (NFR-O3).
-    if (checkBudget(this.neuronsToday(), this.dailyBudget()) === "exhausted") {
+    if (
+      checkBudget(this.neuronsInWindow(), this.dailyBudget()) === "exhausted"
+    ) {
       bumpDailyCounter(this.ctx.storage.sql, this.today(), "refused_turns");
       return new Response(BUDGET_EXHAUSTED_MESSAGE);
     }
@@ -329,7 +331,7 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
     return readCostReport(
       this.ctx.storage.sql,
       this.today(),
-      this.neuronsToday(),
+      this.neuronsInWindow(),
       this.dailyBudget()
     );
   }
@@ -373,8 +375,8 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
     return isoDate(new Date().toISOString().slice(0, 10));
   }
 
-  private neuronsToday(): number {
-    return readNeuronsToday(this.ctx.storage.sql, this.today());
+  private neuronsInWindow(): number {
+    return readNeuronsInWindow(this.ctx.storage.sql, new Date());
   }
 
   private publishSelfCost(): void {
@@ -383,7 +385,7 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
       ...this.state,
       selfCost: {
         monthCostMicros: month.costMicros,
-        todayNeurons: this.neuronsToday(),
+        windowNeurons: this.neuronsInWindow(),
         dailyBudgetNeurons: this.dailyBudget(),
         unmeteredTurns: month.unmeteredTurns
       }

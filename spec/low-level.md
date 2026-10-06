@@ -673,7 +673,20 @@ Phase 5 built documentation search, the response checker and the evaluation suit
 - Established: the limit Cloudflare enforces is not the per-UTC-day total its analytics report. On 2026-10-05 calls were still answered more than an hour after that day's total passed 10,000; on 2026-10-06 calls were refused at about 3,500.
 - Not established: what window Cloudflare does use, and so when calls will resume. The figures fit a window that still includes the 12,557 neurons of 04:00 UTC on 2026-10-05, applied with a delay, but that is a guess. The pricing page says limits reset daily at 00:00 UTC.
 
-**Consequences for the guards.** The per-instance budgets and the smoke pre-flight check both rest on the per-UTC-day figure, so neither can promise that a model call will be accepted. They still cap what the app spends. NFR-O4 holds in the sense that nothing is billed: on the free plan an exhausted allowance means refused calls, not charges.
+**Research into the window (2026-10-06).**
+
+- What Cloudflare documents: the pricing page says "All limits reset daily at 00:00 UTC. If you exceed any one of the above limits, further operations will fail with an error." The errors page lists the refusal as "Account limited", code 3036; the app received code 4006 with the same wording. Nothing in the pricing, limits, errors or changelog pages mentions a rolling window or a delay.
+- What was observed: calls were answered from 00:01 to 00:27 UTC on 2026-10-06 and refused from about 00:30. At that point the calendar day held about 3,500 neurons and the trailing 24 hours held 16,437.
+- The reading that fits every observation: a block is cleared at 00:00 UTC, and usage is then re-evaluated after a delay against a window that still includes the previous day's burst. That is consistent with a trailing 24-hour window checked periodically. It is an inference from two days of data, not something Cloudflare states.
+- How it will be settled: the 12,557-neuron burst was between 04:00 and 05:00 UTC on 2026-10-05. If calls resume shortly after 05:00 UTC on 2026-10-06, the window is the trailing 24 hours. If they stay refused until 00:00 UTC on 2026-10-07, the block lasts to the next daily reset. A probe that costs nothing when refused is being run hourly, and its log decides this.
+
+**Adjustment made.** The app now counts over the trailing 24 hours in both places, because that is never looser than the calendar day and so is safe under either reading:
+
+- Each agent instance's budget counts the neurons it metered in the trailing 24 hours (`readNeuronsInWindow`). Usage from 23 hours ago counts even though it was yesterday; a test covers both sides of the boundary.
+- The smoke pre-flight sums the account's neurons over the trailing 24 hours from GraphQL Analytics. Run at 00:45 UTC on 2026-10-06 it reported 16,437 and refused, which matches what Cloudflare was doing.
+- The budget variables keep their names; each is now a budget per 24 hours.
+
+**Consequences for the guards.** With the trailing window the guards agree with the refusals seen so far, but the enforced rule is still inferred, so they cannot promise a call will be accepted. They cap what the app spends. NFR-O4 holds in the sense that nothing is billed: on the free plan an exhausted allowance means refused calls, not charges.
 
 **Changes made.**
 

@@ -254,9 +254,9 @@ Drafting a credit request is a short, deterministic task with no waiting, so it 
 | NFR-O1 | Workflow steps are idempotent. A retried step does not write a second snapshot or close a period twice. |
 | NFR-O2 | The first token of a chat answer streams within 5 seconds at the median (target, measured in the evaluation run). |
 | NFR-O3 | The daily neuron budget (UC-8) is enforced in code before each model call. |
-| NFR-O4 | The project stays inside Cloudflare's free tier. The binding limit is Workers AI: 10,000 neurons a day for the whole account. The daily budgets of every agent instance in every environment add up to no more than 9,000, enforced by a test. |
+| NFR-O4 | The project stays inside Cloudflare's free tier. The binding limit is Workers AI: 10,000 neurons a day for the whole account. The budgets of every agent instance in every environment add up to no more than 9,000, enforced by a test. Budgets are counted over the trailing 24 hours, which is never looser than the calendar day Cloudflare documents and matches the refusals observed. |
 | NFR-O5 | A chat turn that is going in circles is detected and stopped: two failed tool calls in a row, or the same call made a third time. A turn is at most five model steps. A turn that ends with nothing to show gets a fixed message. |
-| NFR-O6 | The smoke test checks the account's neuron usage before it makes any model call, and the deploy script runs that check before it uploads. A run that would take the account past 8,000 neurons for the day is refused. |
+| NFR-O6 | The smoke test checks the account's neuron usage before it makes any model call, and the deploy script runs that check before it uploads. A run that would take the account past 8,000 neurons in the trailing 24 hours is refused. |
 
 ### Deployment
 

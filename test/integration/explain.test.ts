@@ -264,9 +264,9 @@ describe("getAssistantCost (UC-8)", () => {
       unmeteredTurns: "1",
       turnsRefusedOverBudget: "0"
     });
-    expect(report.today).toEqual({
+    expect(report.last24Hours).toEqual({
       neurons: "15.5",
-      dailyBudget: `${Number(env.DAILY_NEURON_BUDGET).toLocaleString("en-US")} neurons`
+      budget: `${Number(env.DAILY_NEURON_BUDGET).toLocaleString("en-US")} neurons per 24 hours`
     });
     expect(report.lastDays).toHaveLength(1);
     expect(report.limits).toHaveLength(3);
