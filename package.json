@@ -15,15 +15,16 @@
     "start": "vite dev",
     "types": "wrangler types env.d.ts --strict-vars false",
     "format": "oxfmt --write .",
-    "lint": "oxlint src/ test/ scripts/",
-    "check": "oxfmt --check . && oxlint src/ test/ scripts/ && tsc",
+    "lint": "oxlint src/ test/ scripts/ evals/",
+    "check": "oxfmt --check . && oxlint src/ test/ scripts/ evals/ && tsc",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "COVERAGE_SCOPE=domain vitest run --project unit --coverage && COVERAGE_SCOPE=app vitest run --project integration --coverage",
     "deploy:staging": "node scripts/deploy.mjs staging",
     "deploy:production": "node scripts/deploy.mjs production",
     "smoke": "node scripts/smoke.mjs",
-    "gate": "node scripts/check-phase-gate.mjs"
+    "gate": "node scripts/check-phase-gate.mjs",
+    "eval": "node scripts/eval.mjs"
   },
   "dependencies": {
     "@ai-sdk/react": "^4.0.130",

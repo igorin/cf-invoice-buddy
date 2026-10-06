@@ -1,6 +1,7 @@
 import { tool } from "ai";
 import { z } from "zod";
 import type { InvoiceBuddyAgent } from "../agent";
+import { SPECULATION_LABEL } from "../domain/grounding";
 import { SCENARIOS, isScenarioId } from "../domain/scenarios";
 import {
   MONTH_PATTERN,
@@ -77,6 +78,29 @@ export function buildTools(agent: InvoiceBuddyAgent) {
         return ignored.length === 0
           ? described
           : { ...described, notes: [...described.notes, ...ignored] };
+      }
+    }),
+    searchCloudflareDocs: tool({
+      description:
+        "Search Cloudflare's documentation for how a product is billed or why a charge can change. Use it only after explainBillChange found no cause, or when the owner asks how billing works.",
+      inputSchema: z.object({
+        query: z.string().describe("What to look up, in a few words.")
+      }),
+      execute: async ({ query }) => {
+        const found = await agent.searchDocs(query);
+        if (!found.ok) {
+          return {
+            results: [],
+            note: `Documentation could not be searched: ${found.reason}`
+          };
+        }
+        return {
+          results: found.results,
+          instruction:
+            found.results.length === 0
+              ? "Nothing was found. Do not suggest a cause."
+              : `A cause taken from these pages is not from the account's data. Start that sentence with "${SPECULATION_LABEL}" and put the page's url in the same sentence. Use only these urls, exactly as given.`
+        };
       }
     }),
     getAssistantCost: tool({

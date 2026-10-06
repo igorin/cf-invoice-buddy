@@ -6,6 +6,7 @@
 // The chat checks use the account's dedicated smoke-test agent instance, so
 // smoke runs never write into the owner's own conversation.
 import { spawn } from "node:child_process";
+import { openAgent } from "./agent-client.mjs";
 import { ENVIRONMENTS, WORKER_NAMES, fail, readEnvFile } from "./lib.mjs";
 
 const [environment, expectedSha] = process.argv.slice(2);
@@ -21,14 +22,8 @@ const accessHeaders = {
   "CF-Access-Client-Id": secrets.CF_ACCESS_CLIENT_ID,
   "CF-Access-Client-Secret": secrets.CF_ACCESS_CLIENT_SECRET
 };
-const TURN_TIMEOUT_MS = 90_000;
-const RPC_TIMEOUT_MS = 30_000;
 const VERSION_WAIT_MS = 90_000;
 const VERSION_POLL_MS = 3_000;
-const CONNECT_ATTEMPTS = 3;
-const CONNECT_RETRY_MS = 5_000;
-// The meter state follows the last chat frame; allow it a moment.
-const STATE_SETTLE_MS = 5_000;
 // The live log stream takes several seconds to attach and to flush.
 const LOG_ATTACH_MS = 15_000;
 const LOG_FLUSH_MS = 8_000;
@@ -67,8 +62,6 @@ function expect(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 function repeatedWordRatio(text) {
   const words = text.toLowerCase().split(/\s+/).filter(Boolean);
   if (words.length < 2) return 0;
@@ -80,115 +73,6 @@ function repeatedWordRatio(text) {
 function quotesFigure(text, figure) {
   const escaped = figure.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(`(?<![\\d,.])${escaped}(?![\\d,]|\\.\\d)`).test(text);
-}
-
-/** Opens the agent's WebSocket, retrying a failed connection after a deploy. */
-async function connect(instance) {
-  const url = `${baseUrl.replace(/^http/, "ws")}/agents/invoice-buddy-agent/${instance}`;
-  for (let attempt = 1; ; attempt++) {
-    try {
-      return await new Promise((resolve, reject) => {
-        const socket = new WebSocket(url, { headers: accessHeaders });
-        socket.onopen = () => resolve(socket);
-        socket.onerror = () => reject(new Error("WebSocket connection failed"));
-      });
-    } catch (error) {
-      if (attempt === CONNECT_ATTEMPTS) throw error;
-      console.log(
-        `  connection failed, retrying (${attempt}/${CONNECT_ATTEMPTS})`
-      );
-      await sleep(CONNECT_RETRY_MS);
-    }
-  }
-}
-
-/** A session with the agent: method calls, one chat turn, and state updates. */
-async function openAgent(instance) {
-  const socket = await connect(instance);
-  const pending = new Map();
-  const states = [];
-  let onChatFrame = () => {};
-  let calls = 0;
-  socket.onmessage = (event) => {
-    let frame;
-    try {
-      frame = JSON.parse(String(event.data));
-    } catch {
-      return;
-    }
-    if (frame.type === "cf_agent_state") states.push(frame.state);
-    if (frame.type === "cf_agent_use_chat_response") onChatFrame(frame);
-    if (frame.type === "rpc" && pending.has(frame.id)) {
-      const { resolve, reject } = pending.get(frame.id);
-      pending.delete(frame.id);
-      if (frame.success) resolve(frame.result);
-      else reject(new Error(frame.error ?? "call failed"));
-    }
-  };
-  return {
-    states,
-    close: () => socket.close(),
-    /** Empties the conversation, so every run sends the model the same small context. */
-    clearHistory: () =>
-      socket.send(JSON.stringify({ type: "cf_agent_chat_clear" })),
-    call(method, args = []) {
-      return new Promise((resolve, reject) => {
-        const id = `smoke-rpc-${++calls}`;
-        const timer = setTimeout(
-          () => reject(new Error(`${method} timed out`)),
-          RPC_TIMEOUT_MS
-        );
-        pending.set(id, {
-          resolve: (value) => (clearTimeout(timer), resolve(value)),
-          reject: (error) => (clearTimeout(timer), reject(error))
-        });
-        socket.send(JSON.stringify({ type: "rpc", id, method, args }));
-      });
-    },
-    ask(question) {
-      return new Promise((resolve, reject) => {
-        const timer = setTimeout(
-          () => reject(new Error("chat turn timed out")),
-          TURN_TIMEOUT_MS
-        );
-        let text = "";
-        const tools = new Set();
-        onChatFrame = (frame) => {
-          try {
-            const part = JSON.parse(frame.body);
-            if (part.type === "text-delta") text += part.delta ?? "";
-            if (part.toolName) tools.add(part.toolName);
-          } catch {
-            // Frames without a JSON body carry no text.
-          }
-          if (frame.done) {
-            clearTimeout(timer);
-            sleep(STATE_SETTLE_MS).then(() =>
-              resolve({ text, tools: [...tools] })
-            );
-          }
-        };
-        socket.send(
-          JSON.stringify({
-            type: "cf_agent_use_chat_request",
-            id: `smoke-${Date.now()}`,
-            init: {
-              method: "POST",
-              body: JSON.stringify({
-                messages: [
-                  {
-                    id: `smoke-user-${Date.now()}`,
-                    role: "user",
-                    parts: [{ type: "text", text: question }]
-                  }
-                ]
-              })
-            }
-          })
-        );
-      });
-    }
-  };
 }
 
 /** Splits a stream of concatenated, pretty-printed JSON objects. */
@@ -364,7 +248,11 @@ await check(
   "the usage summary shows the account's real usage (UC-9)",
   async () => {
     expect(accountId, "no session");
-    agent = await openAgent(`${accountId}-smoke`);
+    agent = await openAgent({
+      baseUrl,
+      headers: accessHeaders,
+      instance: `${accountId}-smoke`
+    });
     agent.clearHistory();
     liveSummary = await agent.call("getUsageSummary");
     expect(liveSummary.dataset === "live", `dataset is ${liveSummary.dataset}`);
@@ -415,6 +303,26 @@ await check(
     expect(
       JSON.stringify(after.rows) === JSON.stringify(liveSummary.rows),
       "live figures changed after a visit to test mode"
+    );
+  }
+);
+
+await check(
+  "documentation search returns Cloudflare pages (G-2, G-7)",
+  async () => {
+    expect(agent, "no agent session");
+    const found = await agent.call("searchDocs", ["Workers AI pricing"]);
+    expect(found.ok, `search failed: ${found.reason}`);
+    expect(found.results.length > 0, "no pages returned");
+    const foreign = found.results.filter(
+      (page) => !page.url.startsWith("https://developers.cloudflare.com/")
+    );
+    expect(
+      foreign.length === 0,
+      "a page outside Cloudflare's documentation was returned"
+    );
+    console.log(
+      `  ${found.results.length} pages, all on developers.cloudflare.com`
     );
   }
 );

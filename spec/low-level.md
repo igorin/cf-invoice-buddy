@@ -635,6 +635,25 @@ These budgets guarantee the allowance only for what the app itself spends. Model
 
 **Duplicate files.** On 2026-10-05 the working tree, `.git` and `node_modules` filled with copies named like `explain 2.ts`: nine in the source tree, hundreds in `dist`, 7,854 in `node_modules`, and stray `index 2` and `refs/heads/main 2` files inside `.git` that made `git rev-list --all` fail. Six were committed by `git add -A` and broke CI. The cause is iCloud Drive: the Mac has "Desktop & Documents Folders" turned on, the repository is under `~/Documents`, the folder carries the iCloud file-provider markers and no other sync tool is running. iCloud writes a numbered copy when it sees a conflicting change, which a reinstall or a build produces by the thousand. All copies were deleted and `.gitignore` now ignores names ending in a space and a number, which also covers copies of ignored secret files such as `.dev 2.vars`. The whole `Code` folder was moved from `~/Documents/Code` to `~/Code` the same day, outside iCloud's reach. A direct rename was refused by the file provider, so it was copied, verified identical and then removed from the old location.
 
+### Phase 5 implementation notes (2026-10-06)
+
+Phase 5 built documentation search, the response checker and the evaluation suite.
+
+| Topic | What was built | Note |
+| --- | --- | --- |
+| Documentation search | `CloudflareDocsSearch` posts one `tools/call` request to `https://docs.mcp.cloudflare.com/mcp` and reads the server-sent reply. Up to three pages, each cut to a 400-character excerpt, and only pages on `developers.cloudflare.com`. | Section 5 says to connect with the SDK's `addMcpServer`. A direct request is the same protocol with no connection to keep alive across the agent's sleep and wake, and it is tested by replaying the server's real response. The server needs no session or credentials. |
+| Tool | `searchCloudflareDocs`. Its result carries the instruction to label a documentation-based cause as speculation and to use only the links given. | The model is told to call it only when no cause was found or the owner asks how something is billed. |
+| Response checker | `src/domain/grounding.ts`, run from `onChatResponse` on every reply. It checks figures (G-1), links (G-7), the speculation label on documentation links (G-3) and that no cause is offered when none was found (G-4). | A breach is written to `audit_log` and a fixed notice is added to the chat. The reply has already been shown, so it is corrected, not withdrawn. |
+| Figures checked | Dollar amounts, percentages, dates, months, numbers with a thousands separator, and decimals. Small whole numbers are not checked. An amount or percentage may drop its trailing zeros. Figures from the owner's own message may be repeated. | Whole numbers under 1,000 are too often words ("2 days") to check without false alarms. |
+| Causal phrases | "because", "due to", "likely", "probably", "caused by", "possibly", "perhaps", "may be", "might be", "could be". | As section 7 says, this is a heuristic. The first evaluation run showed it also catches harmless wording, which the tool's instruction now steers the model away from. |
+| Scenario | `injected-text`: a zone whose name is an instruction to the assistant. | Used by the evaluation suite; also selectable in the UI. |
+| Unexplained remainder | A zone finding now counts towards what is explained, whichever of the zone view and the product view explains more. | Before, a bill fully explained by a new zone was also reported as fully unexplained. Found by the evaluation run. |
+| Evaluations | `evals/cases.mjs` holds ten cases, six grounding and four capability, graded in code and by the response checker. `scripts/eval.mjs` runs them against a running app and enforces the gates of NFR-T5. | Run by hand with `npm run dev` and `npm run eval`. No model grader was needed. The summary of each run is in `evals/RESULTS.md`; raw output stays out of git because replies quote the account's usage. |
+| First evaluation run | Failed the grounding gate: four of six grounding cases passed, and all four capability cases. After fixes the two failing cases pass three of three, rerun one at a time. | A clean run of the whole suite is still owed and is to be done before a release. Details are in `evals/RESULTS.md`. |
+| Budgets | Rebalanced, still 9,000 in total: production owner 3,000 and smoke 600; staging owner 400 and smoke 1,000; local owner 500 and smoke 3,500. | The local smoke instance runs the evaluation suite, which used about 3,300 neurons on its first day. A full clean run needs roughly 2,500. |
+| Smoke test | One more check, with no model call: the documentation search returns pages, all on `developers.cloudflare.com`. | Nine checks, one model turn. |
+| Shared client | The agent WebSocket client moved from the smoke test to `scripts/agent-client.mjs`, used by both the smoke test and the evaluation runner. | |
+
 ### Checked against ECC skills
 
 | Skill | Applied as |

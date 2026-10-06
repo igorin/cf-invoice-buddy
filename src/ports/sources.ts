@@ -32,3 +32,17 @@ export interface BillingSource {
 }
 
 export type Fetcher = (url: string, init: RequestInit) => Promise<Response>;
+
+export type DocsPage = Readonly<{
+  title: string;
+  url: string;
+  excerpt: string;
+}>;
+
+export type DocsSearchResult =
+  | Readonly<{ ok: true; results: ReadonlyArray<DocsPage> }>
+  | Readonly<{ ok: false; reason: string }>;
+
+export interface DocsSearch {
+  search(query: string): Promise<DocsSearchResult>;
+}

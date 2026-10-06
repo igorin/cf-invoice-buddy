@@ -219,6 +219,33 @@ describe("zone-change", () => {
     );
   });
 
+  it("counts a new zone's charges as explained, not as a remainder", () => {
+    const current = [
+      ...base(OCT),
+      ...daily("Workers", OCT, 2, { zone: "new.example" })
+    ];
+    const result = runDetectors(input(current, base));
+    expect(result.findings.map((f) => f.detector)).toEqual(["zone-change"]);
+    expect(result.unexplainedMicros).toBe(0);
+  });
+
+  it("does not count a zone's charges twice when a spike already explains them", () => {
+    const current = [
+      ...base(OCT),
+      ...daily("Workers", OCT, 0, {
+        zone: "new.example",
+        overrides: { 5: 100 }
+      })
+    ];
+    const result = runDetectors(input(current, base));
+    expect(result.findings.map((f) => f.detector).sort()).toEqual([
+      "usage-spike",
+      "zone-change"
+    ]);
+    // The spike and the zone finding describe the same $100.
+    expect(result.unexplainedMicros).toBe(0);
+  });
+
   it("finds a zone whose charges stopped", () => {
     const finding = runDetectors(
       input(daily("Workers", OCT, 4, { zone: "other.example" }), base)

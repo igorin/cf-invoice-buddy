@@ -1,3 +1,4 @@
+import { CANNOT_EXPLAIN } from "../domain/grounding";
 import type { ExplanationView } from "../services/explain-service";
 
 /**
@@ -8,9 +9,8 @@ import type { ExplanationView } from "../services/explain-service";
 
 const INSTRUCTION: Record<ExplanationView["outcome"], string> = {
   explained:
-    "State the findings as the causes, each with its evidence. State no other cause. If unexplained is not $0.00, say that amount is not explained by the account's data.",
-  none_found:
-    "No cause was found. Give the breakdown, then say exactly: \"I can't explain this difference from the account's data.\" Do not suggest any possible reason.",
+    "State the findings as the causes, each with its evidence. State no other cause, no speculation and no link. If unexplained is not $0.00, say that amount is not explained by the account's data.",
+  none_found: `No cause was found in the account's data. Give the breakdown as plain figures, without words such as because, due to, likely or probably. You may call searchCloudflareDocs once; if a page describes a cause, state it as speculation with its link. Otherwise say exactly: "${CANNOT_EXPLAIN}" Never suggest a reason of your own.`,
   no_baseline:
     "There is nothing to compare with. Give the figures for the month and ask the owner which month to compare against. Do not describe the bill as higher or lower than usual.",
   no_charges:
