@@ -2,7 +2,10 @@
 // in evals/cases.mjs against a running app and grades the replies in code.
 //
 // Usage: npm run dev   (in another terminal)
-//        npm run eval  [-- --only <case id>]
+//        npm run eval  [-- --changed [base] | --only <case id>[,<case id>]]
+//
+// --changed runs only the cases affected by the changes since base
+// (default origin/main). A release needs a run of the whole suite.
 //
 // It runs on the local app's smoke-test instance, which has its own daily
 // neuron budget, and stops before that budget or the account's free
@@ -10,8 +13,10 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { CASES } from "../evals/cases.mjs";
 import { checkGrounding } from "../src/domain/grounding.ts";
+import { UNVERIFIED_MESSAGE } from "../src/domain/verified-stream.ts";
 import { openAgent } from "./agent-client.mjs";
-import { fail } from "./lib.mjs";
+import { selectCases } from "../evals/select.ts";
+import { fail, run } from "./lib.mjs";
 
 const BASE_URL = process.env.EVAL_URL ?? "http://localhost:5173";
 const RUNS = 3;
@@ -23,11 +28,55 @@ const ALLOWED_URLS = [
   "https://developers.cloudflare.com/support/contacting-cloudflare-support/"
 ];
 
-const only = process.argv.includes("--only")
-  ? process.argv[process.argv.indexOf("--only") + 1]
-  : null;
-const cases = only ? CASES.filter((item) => item.id === only) : CASES;
-if (cases.length === 0) fail(`No case named ${only}`);
+// Which cases to run. Every case costs model calls, so day-to-day runs take
+// only the cases a change affects; a release needs the whole suite.
+const option = (name) =>
+  process.argv.includes(name)
+    ? (process.argv[process.argv.indexOf(name) + 1] ?? "")
+    : null;
+
+function changedFilesSince(base) {
+  const list = (args) => run("git", args).split("\n").filter(Boolean);
+  return [
+    ...new Set([
+      ...list(["diff", "--name-only", `${base}...HEAD`]),
+      ...list(["diff", "--name-only", "HEAD"]),
+      ...list(["ls-files", "--others", "--exclude-standard"])
+    ])
+  ];
+}
+
+function chooseCases() {
+  const only = option("--only");
+  if (only !== null) {
+    const ids = only.split(",");
+    const unknown = ids.filter((id) => !CASES.some((item) => item.id === id));
+    if (only === "" || unknown.length > 0) {
+      fail(`No case named ${unknown.join(", ") || "(none given)"}`);
+    }
+    return {
+      scope: ids.length === CASES.length ? "full" : "only",
+      cases: CASES.filter((item) => ids.includes(item.id))
+    };
+  }
+  const changed = option("--changed");
+  if (changed === null) return { scope: "full", cases: CASES };
+  const base =
+    changed === "" || changed.startsWith("--") ? "origin/main" : changed;
+  const selection = selectCases(changedFilesSince(base), CASES);
+  console.log(
+    selection.because
+      ? `Every case runs: ${selection.because} can affect any reply.`
+      : `Changes since ${base} affect ${selection.cases.length} of ${CASES.length} cases.`
+  );
+  return selection;
+}
+
+const { scope, cases } = chooseCases();
+if (cases.length === 0) {
+  console.log("No evaluation case is affected. Nothing to run.");
+  process.exit(0);
+}
 
 let session;
 try {
@@ -85,6 +134,9 @@ async function runOnce(item) {
     problems,
     seconds: Math.round((Date.now() - started) / 100) / 10,
     tools: turn.tools,
+    // The app held this reply back: nothing unverified reached the owner,
+    // but the owner got no answer either.
+    withheld: turn.text.includes(UNVERIFIED_MESSAGE),
     reply: turn.text
   };
 }
@@ -141,10 +193,15 @@ const complete = !stopped && results.length === cases.length;
 const summary = {
   ranAt: new Date().toISOString(),
   baseUrl: BASE_URL,
+  scope,
   complete,
   stoppedBecause: stopped,
   neurons,
   turns: results.reduce((total, result) => total + result.runs.length, 0),
+  withheld: results.reduce(
+    (total, result) => total + result.runs.filter((run) => run.withheld).length,
+    0
+  ),
   grounding: {
     passed: grounding.filter((r) => r.passed).length,
     of: grounding.length
@@ -168,7 +225,15 @@ console.log(
 console.log(
   `${summary.turns} model turns, ${neurons} neurons. Results: ${file}`
 );
+console.log(
+  `${summary.withheld} of ${summary.turns} replies were withheld by the response checker.`
+);
 if (stopped) console.log(`Stopped early: ${stopped}.`);
+if (scope !== "full") {
+  console.log(
+    `Partial run (${cases.length} of ${CASES.length} cases): not a release result.`
+  );
+}
 
 const ok =
   complete &&

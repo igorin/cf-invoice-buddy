@@ -5,8 +5,9 @@ import type { UIMessage } from "ai";
 import { afterEach, describe, expect, it } from "vitest";
 import { InvoiceBuddyAgent } from "../../src/agent";
 import { CANNOT_EXPLAIN, SPECULATION_LABEL } from "../../src/domain/grounding";
+import type { TurnForReview } from "../../src/domain/verified-stream";
 import type { DocsSearchResult } from "../../src/ports/sources";
-import { reviewReply } from "../../src/services/grounding-service";
+import { reviewTurn } from "../../src/services/grounding-service";
 import { buildTools } from "../../src/tools";
 
 const PRICING =
@@ -133,27 +134,20 @@ describe("data tools", () => {
 function reply(
   text: string,
   tools: Array<{ type: string; output: unknown }>
-): UIMessage {
+): TurnForReview {
   return {
-    id: "a1",
-    role: "assistant",
-    parts: [
-      ...tools.map((tool, index) => ({
-        type: tool.type,
-        toolCallId: `c${index}`,
-        state: "output-available",
-        input: {},
-        output: tool.output
-      })),
-      { type: "text", text }
-    ]
-  } as UIMessage;
+    text,
+    tools: tools.map((tool) => ({
+      name: tool.type.replace("tool-", ""),
+      output: tool.output
+    }))
+  };
 }
 
 const owner = (text: string): UIMessage =>
   ({ id: "u1", role: "user", parts: [{ type: "text", text }] }) as UIMessage;
 
-describe("reviewReply: the checker over a finished reply (spec section 7)", () => {
+describe("reviewTurn: the checker over a turn (spec section 7)", () => {
   const docsTool = {
     type: "tool-searchCloudflareDocs",
     output: {
@@ -170,7 +164,7 @@ describe("reviewReply: the checker over a finished reply (spec section 7)", () =
       `Your bill is $27.00. ${SPECULATION_LABEL}: see ${PRICING}.`,
       [noneFound, docsTool]
     );
-    expect(reviewReply(message, [owner("Why is my bill lower?")])).toEqual([]);
+    expect(reviewTurn(message, [owner("Why is my bill lower?")])).toEqual([]);
   });
 
   it("flags the same link when it is not labelled", () => {
@@ -178,7 +172,7 @@ describe("reviewReply: the checker over a finished reply (spec section 7)", () =
       noneFound,
       docsTool
     ]);
-    expect(reviewReply(message, [owner("Why?")]).map((v) => v.rule)).toEqual([
+    expect(reviewTurn(message, [owner("Why?")]).map((v) => v.rule)).toEqual([
       "G-3"
     ]);
   });
@@ -187,18 +181,18 @@ describe("reviewReply: the checker over a finished reply (spec section 7)", () =
     const message = reply("Your bill is $27.00, probably from less traffic.", [
       noneFound
     ]);
-    expect(reviewReply(message, [owner("Why?")]).map((v) => v.rule)).toEqual([
+    expect(reviewTurn(message, [owner("Why?")]).map((v) => v.rule)).toEqual([
       "G-4"
     ]);
     const fine = reply(`Your bill is $27.00. ${CANNOT_EXPLAIN}`, [noneFound]);
-    expect(reviewReply(fine, [owner("Why?")])).toEqual([]);
+    expect(reviewTurn(fine, [owner("Why?")])).toEqual([]);
   });
 
   it("uses the latest owner message for figures the owner gave", () => {
     const message = reply("You said $412; the account shows $27.00.", [
       noneFound
     ]);
-    const violations = reviewReply(message, [
+    const violations = reviewTurn(message, [
       owner("Earlier question"),
       owner("Is it $412?")
     ]);
@@ -206,6 +200,6 @@ describe("reviewReply: the checker over a finished reply (spec section 7)", () =
   });
 
   it("copes with a reply that has no tool results and no owner message", () => {
-    expect(reviewReply(reply("Hello.", []), [])).toEqual([]);
+    expect(reviewTurn(reply("Hello.", []), [])).toEqual([]);
   });
 });

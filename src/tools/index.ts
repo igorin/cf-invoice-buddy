@@ -49,14 +49,14 @@ export function buildTools(agent: InvoiceBuddyAgent) {
   return {
     getUsageSummary: tool({
       description:
-        "Get what the account has used this billing period, per product and metric, against included allowances, and what was billed. Use it for any question about usage or charges.",
+        "Usage and charges this billing period, per product, against included allowances. Use for any question about usage or charges.",
       inputSchema: z.object({}),
       execute: async () =>
         describeSummaryForModel(await agent.getUsageSummary())
     }),
     explainBillChange: tool({
       description:
-        "Explain the bill for a billing month: the total, the difference from a baseline by product, and any causes found in the account's data. Pass baselineMonth when the owner names a month to compare against. Use it for any question about why a bill is higher, lower or different.",
+        "Explain a month's bill: total, difference from a baseline by product, and causes found in the account's data. Use for why a bill is higher, lower or different. Call with no arguments unless the owner names a month; amounts in the question are not months.",
       // Deliberately loose. The model sometimes fills these with words or
       // amounts from the question ("usual", "$150"); a strict schema made it
       // retry the call until the turn ran out of steps and replied nothing.
@@ -64,13 +64,11 @@ export function buildTools(agent: InvoiceBuddyAgent) {
         month: z
           .string()
           .nullish()
-          .describe("Month to explain, YYYY-MM. Omit for the current month."),
+          .describe("YYYY-MM. Omit for the current month."),
         baselineMonth: z
           .string()
           .nullish()
-          .describe(
-            "Month to compare against, YYYY-MM. Only if the owner named a month; otherwise omit."
-          )
+          .describe("YYYY-MM, only if the owner named a month to compare with.")
       }),
       execute: async (input) => {
         const { request, ignored } = readExplainInput(input);
@@ -82,9 +80,9 @@ export function buildTools(agent: InvoiceBuddyAgent) {
     }),
     searchCloudflareDocs: tool({
       description:
-        "Search Cloudflare's documentation for how a product is billed or why a charge can change. Use it only after explainBillChange found no cause, or when the owner asks how billing works.",
+        "Search Cloudflare's documentation. Use only after explainBillChange found no cause, or when the owner asks how something is billed.",
       inputSchema: z.object({
-        query: z.string().describe("What to look up, in a few words.")
+        query: z.string().describe("A few words.")
       }),
       execute: async ({ query }) => {
         const found = await agent.searchDocs(query);
@@ -105,13 +103,13 @@ export function buildTools(agent: InvoiceBuddyAgent) {
     }),
     getAssistantCost: tool({
       description:
-        "Report what this assistant itself has cost to run: metered model usage this month and today, against the daily budget. Use it when the owner asks what the assistant costs.",
+        "What this assistant itself has cost to run, this month and today, against its daily budget.",
       inputSchema: z.object({}),
       execute: async () => agent.getAssistantCost()
     }),
     setDataMode: tool({
       description:
-        "Switch between the account's live data and test mode, which uses fixture data. Only call this when the owner asks to switch. The owner must confirm before it runs.",
+        "Switch between live data and test mode (fixture data). Only when the owner asks; the owner confirms before it runs.",
       inputSchema: z.object({
         dataset: z.enum(["live", "test"]),
         scenario: z.string().optional()

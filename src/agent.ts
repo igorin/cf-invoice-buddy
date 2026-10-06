@@ -48,7 +48,7 @@ import {
   recordTurn,
   type CostReport
 } from "./db/self-usage-store";
-import { GROUNDING_NOTICE, reviewReply } from "./services/grounding-service";
+import { checkedResponse } from "./services/grounding-service";
 import {
   reportTurnError,
   hasVisibleReply,
@@ -182,7 +182,12 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
       }
     });
 
-    return result.toUIMessageStreamResponse({ onError: reportTurnError });
+    // Text is held until the response checker has passed it (section 7).
+    return checkedResponse(
+      result.toUIMessageStream({ onError: reportTurnError }),
+      this.messages,
+      (violations) => this.audit("grounding_violation", null, violations)
+    );
   }
 
   /**
@@ -193,14 +198,7 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
     if (result.status !== "completed") return;
     if (!hasVisibleReply(result.message)) {
       await this.appendNotice(NO_ANSWER_MESSAGE);
-      return;
     }
-    // The response checker (spec section 7). The reply has already been
-    // shown, so a breach is corrected with a visible notice and recorded.
-    const violations = reviewReply(result.message, this.messages);
-    if (violations.length === 0) return;
-    this.audit("grounding_violation", result.message.id, violations);
-    await this.appendNotice(GROUNDING_NOTICE);
   }
 
   /** Adds a fixed assistant message to the chat without calling the model. */
