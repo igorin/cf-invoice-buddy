@@ -11,7 +11,6 @@ import {
   streamText,
   type LanguageModel
 } from "ai";
-import { createWorkersAI } from "workers-ai-provider";
 import { CloudflareBillingSource } from "./adapters/billing";
 import { CloudflareDocsSearch } from "./adapters/docs-search";
 import { GraphqlUsageSource } from "./adapters/graphql-usage";
@@ -25,7 +24,6 @@ import {
   type Dataset
 } from "./db/usage-store";
 import { ALLOWANCE_SOURCE, type Plan } from "./domain/allowances";
-import { withDedupedStream } from "./domain/dedupe-stream";
 import {
   isoDate,
   periodContaining,
@@ -51,17 +49,20 @@ import {
   type CostReport
 } from "./db/self-usage-store";
 import { GROUNDING_NOTICE, reviewReply } from "./services/grounding-service";
-import { hasVisibleReply, isLooping } from "./services/turn-guard";
+import {
+  reportTurnError,
+  hasVisibleReply,
+  isLooping
+} from "./services/turn-guard";
 import { fetchClosedMonth, syncCurrentPeriod } from "./services/usage-sync";
 import {
   explainStoredBill,
   type ExplainRequest,
   type ExplanationView
 } from "./services/explain-service";
+import { MODEL_ID, createModel } from "./model";
 import { loadScenario } from "./services/scenario-service";
 import { buildTools } from "./tools";
-
-export const MODEL_ID = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 
 // The model has a 24,000-token context window, so turns are kept short.
 const MAX_STEPS_PER_TURN = 5;
@@ -118,12 +119,7 @@ const INITIAL_STATE: AgentState = {
   lastSyncAt: null
 };
 
-/** Builds the chat model. Tests replace `InvoiceBuddyAgent.modelFactory`. */
-export function createModel(env: Env): LanguageModel {
-  // Llama 3.3 streams each text chunk in two fields; see dedupe-stream.ts.
-  const workersai = createWorkersAI({ binding: withDedupedStream(env.AI) });
-  return workersai(MODEL_ID);
-}
+export { MODEL_ID, createModel } from "./model";
 
 export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
   static modelFactory: (env: Env) => LanguageModel = createModel;
@@ -184,7 +180,7 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
       }
     });
 
-    return result.toUIMessageStreamResponse();
+    return result.toUIMessageStreamResponse({ onError: reportTurnError });
   }
 
   /**

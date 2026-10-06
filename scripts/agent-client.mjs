@@ -82,6 +82,7 @@ export async function openAgent({ baseUrl, headers = {}, instance }) {
         );
         let text = "";
         const tools = new Set();
+        let error = null;
         const inputs = [];
         const outputs = [];
         const toolById = new Map();
@@ -89,6 +90,8 @@ export async function openAgent({ baseUrl, headers = {}, instance }) {
           try {
             const part = JSON.parse(frame.body);
             if (part.type === "text-delta") text += part.delta ?? "";
+            if (part.type === "error")
+              error = part.errorText ?? "unknown error";
             if (part.toolName) tools.add(part.toolName);
             if (part.type === "tool-input-available") {
               inputs.push({ tool: part.toolName, input: part.input });
@@ -106,7 +109,7 @@ export async function openAgent({ baseUrl, headers = {}, instance }) {
           if (frame.done) {
             clearTimeout(timer);
             sleep(STATE_SETTLE_MS).then(() =>
-              resolve({ text, tools: [...tools], inputs, outputs })
+              resolve({ text, tools: [...tools], inputs, outputs, error })
             );
           }
         };
