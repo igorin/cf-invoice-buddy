@@ -7,7 +7,7 @@ Specs are in [spec/](spec/).
 
 Last updated 2026-10-06. The build follows nine phases set out in [spec/low-level.md](spec/low-level.md), section 15. Each phase must be deployed to Cloudflare and pass a smoke test before the next begins.
 
-**Phases 1 to 4 of 9 are deployed.** They run in staging and production behind Cloudflare Access, and both environments pass the smoke test. Phase 5 is merged and uploaded to staging but not yet verified or in production: Cloudflare is refusing model calls for the account until its free daily allowance resets.
+**Phases 1 to 4 of 9 are deployed.** They run in staging and production behind Cloudflare Access, and both environments pass the smoke test. Phase 5 is merged and uploaded to staging but not yet verified or in production: full test run takes a significant amount of daily neurons and production deployments with full end to end test pass can be done ~1 a day.
 
 | Phase | Scope | Status |
 | --- | --- | --- |
@@ -39,8 +39,6 @@ Deploys run from a developer machine until a deploy token is added to GitHub.
 ## Cloudflare API token for usage and billing data
 
 The app reads your account's usage and invoices through the Cloudflare API. It needs its own API token. Being logged in to the `cf` or `wrangler` CLI is not enough: those logins do not include billing access, and a deployed Worker cannot use them.
-
-> Status: a token created this way was tested on 2026-10-05. It read billing data and, through the GraphQL Analytics API, real per-product usage on an account with a $0 bill.
 
 ### Before you start
 
@@ -76,7 +74,7 @@ A response with `"success": true` means the permission works, even if the result
 
 ### Give the token to the app
 
-Locally, put it in `.dev.vars` next to the Wrangler configuration. The file is git-ignored.
+Locally, put it in `.dev.vars` next to the Wrangler configuration. The file must be .gitignored.
 
 ```
 CF_ACCOUNT_ID=<your account id>
@@ -85,7 +83,7 @@ CF_API_TOKEN=<the token secret>
 
 For a deployed environment, put it in that environment's secrets file, described under "Deploying" below.
 
-### Known limit
+### Known limitations
 
 Cloudflare has a newer usage endpoint (`/accounts/{id}/billable/usage`) that reports daily usage including free-tier amounts. It is marked alpha and restricted. A token with the permissions above may still get a 403 from it; access is granted by Cloudflare, not by a token setting.
 
@@ -102,8 +100,6 @@ npm run eval -- --changed   # only the cases affected by changes since origin/ma
 
 Local development reaches the real model through the production Worker's hostname, which Cloudflare Access protects. Run `npm run dev` in a terminal and sign in when the browser prompt appears, or set `CLOUDFLARE_ACCESS_CLIENT_ID` and `CLOUDFLARE_ACCESS_CLIENT_SECRET` to an Access service token for non-interactive use.
 
-Keep the repository out of folders that iCloud Drive syncs, such as `~/Documents` or the Desktop when "Desktop & Documents Folders" is on. iCloud makes numbered conflict copies (`file 2.ts`) of files that change quickly, including inside `.git` and `node_modules`. `.gitignore` ignores such copies, but they still break local type checks and can corrupt the repository's refs.
-
 ### Staying inside the free tier
 
 The app runs on Cloudflare's free plan, where Workers AI allows 10,000 neurons a day for the whole account. Each agent instance has a budget in `wrangler.jsonc`, counted over the trailing 24 hours; together they add up to 9,000, and a test fails if that total is raised past the allowance. Cloudflare documents a reset at 00:00 UTC, but it has refused calls over usage from the previous day, so the app counts the trailing 24 hours to be safe. A chat turn that goes in circles is stopped, and the smoke test, which makes one model turn per run, will not run if it would take the account past 8,000 neurons in the trailing 24 hours.
@@ -119,7 +115,7 @@ npm run deploy:production
 
 The first deploy of a new environment is `node scripts/deploy.mjs <env> --bootstrap`. It uploads the Worker with a placeholder `ACCESS_AUD`, so every request is refused, and exists only to create the hostname for the Access application.
 
-Secrets are read from files in `.secrets/`, which is git-ignored:
+Secrets are read from files in `.secrets/`, which must be .gitignored:
 
 | File | Contents |
 | --- | --- |
