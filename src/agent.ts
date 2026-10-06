@@ -23,16 +23,16 @@ import {
   readUsage,
   type Dataset
 } from "./db/usage-store";
-import { ALLOWANCE_SOURCE, type Plan } from "./domain/allowances";
+import { ALLOWANCE_SOURCE } from "./domain/allowances";
 import {
   isoDate,
   periodContaining,
   type BillingPeriod,
   type IsoDate
 } from "./domain/periods";
-import { SCENARIOS, type ScenarioId } from "./domain/scenarios";
+import { SCENARIOS } from "./domain/scenarios";
 import { checkBudget } from "./domain/self-cost";
-import { buildUsageSummary, type UsageSummary } from "./domain/usage-summary";
+import { buildUsageSummary } from "./domain/usage-summary";
 import type {
   BillingSource,
   DocsSearch,
@@ -60,7 +60,8 @@ import {
   type ExplainRequest,
   type ExplanationView
 } from "./services/explain-service";
-import { MODEL_ID, createModel } from "./model";
+import type { RecordedCall } from "./domain/model-recording";
+import { chooseModel, createModel, type ModelRequest } from "./model";
 import { loadScenario } from "./services/scenario-service";
 import { buildTools } from "./tools";
 
@@ -77,52 +78,23 @@ export const NO_ANSWER_MESSAGE =
 export const BUDGET_EXHAUSTED_MESSAGE =
   "This assistant's usage budget for the last 24 hours is used up. It frees up as earlier usage passes the 24-hour mark.";
 
-export type SelfCost = Readonly<{
-  monthCostMicros: number;
-  windowNeurons: number;
-  dailyBudgetNeurons: number;
-  unmeteredTurns: number;
-}>;
-
-export type DataMode =
-  | Readonly<{ dataset: "live" }>
-  | Readonly<{ dataset: "test"; scenario: ScenarioId }>;
-
-export type AgentState = Readonly<{
-  selfCost: SelfCost;
-  dataMode: DataMode;
-  lastSyncAt: string | null;
-}>;
-
-/** What the usage panel and the usage tool are built from (UC-9). */
-export type UsageSummaryView = UsageSummary &
-  Readonly<{
-    dataset: Dataset;
-    scenario: ScenarioId | null;
-    plan: Plan;
-    lastSyncAt: string | null;
-    allowanceSource: typeof ALLOWANCE_SOURCE;
-  }>;
-
 // Accounts with no billing cycle are summarised by calendar month.
 const LIVE_ANCHOR_DAY = 1;
 const SYNC_CRON = "0 */6 * * *";
 
-const INITIAL_STATE: AgentState = {
-  selfCost: {
-    monthCostMicros: 0,
-    windowNeurons: 0,
-    dailyBudgetNeurons: 0,
-    unmeteredTurns: 0
-  },
-  dataMode: { dataset: "live" },
-  lastSyncAt: null
-};
-
+export * from "./agent-state";
+import {
+  INITIAL_STATE,
+  type AgentState,
+  type DataMode,
+  type UsageSummaryView
+} from "./agent-state";
 export { MODEL_ID, createModel } from "./model";
 
 export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
-  static modelFactory: (env: Env) => LanguageModel = createModel;
+  static modelFactory: (env: Env, request?: ModelRequest) => LanguageModel =
+    createModel;
+  static clock: () => Date = () => new Date();
   static usageSourceFactory: (config: Config) => UsageSource = (config) =>
     new GraphqlUsageSource(config.CF_ACCOUNT_ID, config.CF_API_TOKEN);
   static billingSourceFactory: (config: Config) => BillingSource = (config) =>
@@ -133,6 +105,8 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
   override chatStreamStallTimeoutMs = STREAM_STALL_TIMEOUT_MS;
 
   override initialState: AgentState = INITIAL_STATE;
+  /** Raw model streams kept for the recording script; local runs only. */
+  private recordedCalls: RecordedCall[] = [];
 
   override async onStart(): Promise<void> {
     runMigrations(this.ctx.storage.sql);
@@ -155,8 +129,12 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
       return new Response(BUDGET_EXHAUSTED_MESSAGE);
     }
 
+    const smoke = this.name.endsWith(SMOKE_SUFFIX);
     const result = streamText({
-      model: InvoiceBuddyAgent.modelFactory(this.env),
+      model: InvoiceBuddyAgent.modelFactory(this.env, {
+        smoke,
+        onRecordedCall: (call) => this.recordedCalls.push(call)
+      }),
       system: buildSystemPrompt(this.today()),
       messages: pruneMessages({
         messages: await convertToModelMessages(this.messages),
@@ -175,7 +153,7 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
             outputTokens: totalUsage.outputTokens,
             steps: steps.length
           },
-          MODEL_ID,
+          chooseModel(this.env, smoke).modelId,
           this.today()
         );
         this.publishSelfCost();
@@ -223,6 +201,12 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
       VALUES (${new Date().toISOString()}, ${action === "set_data_mode" ? "owner" : "agent"},
         ${action}, ${subject}, ${this.state.dataMode.dataset},
         ${detail === undefined ? null : JSON.stringify(detail)})`;
+  }
+
+  /** Hands over, once, the model streams recorded since the last call. */
+  @callable()
+  takeRecordedCalls(): RecordedCall[] {
+    return this.recordedCalls.splice(0);
   }
 
   /** Searches Cloudflare's documentation (rule G-2b). No model call. */
@@ -370,7 +354,7 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
   }
 
   private today(): IsoDate {
-    return isoDate(new Date().toISOString().slice(0, 10));
+    return isoDate(InvoiceBuddyAgent.clock().toISOString().slice(0, 10));
   }
 
   private neuronsInWindow(): number {

@@ -24,7 +24,8 @@
     "deploy:production": "node scripts/deploy.mjs production",
     "smoke": "node scripts/smoke.mjs",
     "gate": "node scripts/check-phase-gate.mjs",
-    "eval": "node scripts/eval.mjs"
+    "eval": "node scripts/eval.mjs",
+    "record": "node scripts/record.mjs"
   },
   "dependencies": {
     "@ai-sdk/react": "^4.0.130",

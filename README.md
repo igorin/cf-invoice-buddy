@@ -96,6 +96,7 @@ npm run check          # format, lint, type check
 npm run test:coverage  # unit and integration tests with coverage thresholds
 npm run eval           # whole evaluation suite against the real model; needs `npm run dev` running
 npm run eval -- --changed   # only the cases affected by changes since origin/main
+npm run record         # record the real model's answers for the replay tests; see spec/low-level.md, section 10
 ```
 
 Local development reaches the real model through the production Worker's hostname, which Cloudflare Access protects. Run `npm run dev` in a terminal and sign in when the browser prompt appears, or set `CLOUDFLARE_ACCESS_CLIENT_ID` and `CLOUDFLARE_ACCESS_CLIENT_SECRET` to an Access service token for non-interactive use.
