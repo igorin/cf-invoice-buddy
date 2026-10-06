@@ -22,11 +22,13 @@
   // Daily neuron budgets. Workers AI gives the whole account 10,000 free
   // neurons a day, shared by every instance below. The six budgets add up to
   // 9,000, which a test enforces (test/unit/free-tier.test.ts).
+  // The local smoke instance has the largest share because the evaluation
+  // suite runs on it (npm run eval).
   // Local development. Secrets come from .dev.vars.
   "vars": {
     "ENVIRONMENT": "local",
-    "DAILY_NEURON_BUDGET": "1000",
-    "SMOKE_DAILY_NEURON_BUDGET": "1000",
+    "DAILY_NEURON_BUDGET": "500",
+    "SMOKE_DAILY_NEURON_BUDGET": "3500",
     "AUTH_MODE": "dev",
     "ACCESS_TEAM_DOMAIN": "local.cloudflareaccess.com",
     "ACCESS_AUD": "0000000000000000000000000000000000000000000000000000000000000000"
@@ -61,7 +63,7 @@
       },
       "vars": {
         "ENVIRONMENT": "production",
-        "DAILY_NEURON_BUDGET": "5000",
+        "DAILY_NEURON_BUDGET": "3000",
         "SMOKE_DAILY_NEURON_BUDGET": "600",
         "AUTH_MODE": "access"
       }

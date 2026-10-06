@@ -13,24 +13,20 @@ import {
 } from "ai";
 import { createWorkersAI } from "workers-ai-provider";
 import { CloudflareBillingSource } from "./adapters/billing";
+import { CloudflareDocsSearch } from "./adapters/docs-search";
 import { GraphqlUsageSource } from "./adapters/graphql-usage";
 import { readConfig, type Config } from "./config";
 import { runMigrations } from "./db/schema";
 import {
   isPeriodSynced,
-  markPeriodSynced,
   readBilling,
   readSourceStatus,
   readUsage,
-  replaceUsage,
-  saveBilling,
-  saveSourceStatus,
   type Dataset
 } from "./db/usage-store";
 import { ALLOWANCE_SOURCE, type Plan } from "./domain/allowances";
 import { withDedupedStream } from "./domain/dedupe-stream";
 import {
-  addDays,
   isoDate,
   periodContaining,
   type BillingPeriod,
@@ -39,7 +35,12 @@ import {
 import { SCENARIOS, type ScenarioId } from "./domain/scenarios";
 import { checkBudget } from "./domain/self-cost";
 import { buildUsageSummary, type UsageSummary } from "./domain/usage-summary";
-import type { BillingSource, UsageSource } from "./ports/sources";
+import type {
+  BillingSource,
+  DocsSearch,
+  DocsSearchResult,
+  UsageSource
+} from "./ports/sources";
 import { buildSystemPrompt } from "./prompt";
 import {
   bumpDailyCounter,
@@ -49,7 +50,9 @@ import {
   recordTurn,
   type CostReport
 } from "./db/self-usage-store";
+import { GROUNDING_NOTICE, reviewReply } from "./services/grounding-service";
 import { hasVisibleReply, isLooping } from "./services/turn-guard";
+import { fetchClosedMonth, syncCurrentPeriod } from "./services/usage-sync";
 import {
   explainStoredBill,
   type ExplainRequest,
@@ -65,6 +68,7 @@ const MAX_STEPS_PER_TURN = 5;
 // A model stream silent for this long is treated as hung and aborted.
 const STREAM_STALL_TIMEOUT_MS = 45_000;
 export const SMOKE_SUFFIX = "-smoke";
+const MAX_QUERY_CHARS = 200;
 
 export const NO_ANSWER_MESSAGE =
   "I couldn't complete that answer. Please try asking again, or rephrase the question.";
@@ -127,6 +131,7 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
     new GraphqlUsageSource(config.CF_ACCOUNT_ID, config.CF_API_TOKEN);
   static billingSourceFactory: (config: Config) => BillingSource = (config) =>
     new CloudflareBillingSource(config.CF_ACCOUNT_ID, config.CF_API_TOKEN);
+  static docsSearchFactory: () => DocsSearch = () => new CloudflareDocsSearch();
 
   override maxPersistedMessages = 200;
   override chatStreamStallTimeoutMs = STREAM_STALL_TIMEOUT_MS;
@@ -187,16 +192,52 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
    * guard, gets a fixed line so the owner is never left with silence.
    */
   protected override async onChatResponse(result: ChatResponseResult) {
-    if (result.status !== "completed" || hasVisibleReply(result.message))
+    if (result.status !== "completed") return;
+    if (!hasVisibleReply(result.message)) {
+      await this.appendNotice(NO_ANSWER_MESSAGE);
       return;
+    }
+    // The response checker (spec section 7). The reply has already been
+    // shown, so a breach is corrected with a visible notice and recorded.
+    const violations = reviewReply(result.message, this.messages);
+    if (violations.length === 0) return;
+    this.audit("grounding_violation", result.message.id, violations);
+    await this.appendNotice(GROUNDING_NOTICE);
+  }
+
+  /** Adds a fixed assistant message to the chat without calling the model. */
+  private async appendNotice(text: string): Promise<void> {
     await this.persistMessages([
       ...this.messages,
       {
         id: crypto.randomUUID(),
         role: "assistant",
-        parts: [{ type: "text", text: NO_ANSWER_MESSAGE }]
+        parts: [{ type: "text", text }]
       }
     ]);
+  }
+
+  private audit(
+    action: string,
+    subject: string | null,
+    detail?: unknown
+  ): void {
+    this.sql`
+      INSERT INTO audit_log (at, actor, action, subject_id, dataset, detail_json)
+      VALUES (${new Date().toISOString()}, ${action === "set_data_mode" ? "owner" : "agent"},
+        ${action}, ${subject}, ${this.state.dataMode.dataset},
+        ${detail === undefined ? null : JSON.stringify(detail)})`;
+  }
+
+  /** Searches Cloudflare's documentation (rule G-2b). No model call. */
+  @callable()
+  async searchDocs(query: unknown): Promise<DocsSearchResult> {
+    if (typeof query !== "string" || query.trim() === "") {
+      return { ok: false, reason: "a search needs a question" };
+    }
+    return InvoiceBuddyAgent.docsSearchFactory().search(
+      query.slice(0, MAX_QUERY_CHARS)
+    );
   }
 
   /** Pulls the current period's usage and billing status for the live dataset. */
@@ -204,25 +245,13 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
     const result = readConfig(this.env);
     if (!result.ok) return;
     const today = this.today();
-    const period = periodContaining(today, LIVE_ANCHOR_DAY);
-    const [usage, billing] = await Promise.all([
-      InvoiceBuddyAgent.usageSourceFactory(result.config).fetchUsage(
-        period.start,
-        today
-      ),
-      InvoiceBuddyAgent.billingSourceFactory(result.config).fetchBilling()
-    ]);
-    const at = new Date().toISOString();
-    const sql = this.ctx.storage.sql;
-    // Rows of a product that failed are left as they were; its status is
-    // what keeps them out of the summary.
-    const readable = usage.sources
-      .filter((s) => s.available)
-      .map((s) => s.service);
-    replaceUsage(sql, "live", readable, period.start, today, usage.records);
-    markPeriodSynced(sql, "live", period.start, at);
-    saveSourceStatus(sql, "live", usage.sources, at);
-    saveBilling(sql, "live", billing.billing, billing.plan, at);
+    const at = await syncCurrentPeriod(
+      this.ctx.storage.sql,
+      InvoiceBuddyAgent.usageSourceFactory(result.config),
+      InvoiceBuddyAgent.billingSourceFactory(result.config),
+      periodContaining(today, LIVE_ANCHOR_DAY),
+      today
+    );
     this.setState({ ...this.state, lastSyncAt: at });
   }
 
@@ -270,29 +299,16 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
       dataset === "live"
         ? { dataset }
         : loadScenario(this.ctx.storage.sql, scenario, this.today());
-    this.sql`
-      INSERT INTO audit_log (at, actor, action, subject_id, dataset)
-      VALUES (${new Date().toISOString()}, 'owner', 'set_data_mode',
-        ${mode.dataset === "test" ? mode.scenario : null}, ${mode.dataset})`;
     this.setState({ ...this.state, dataMode: mode });
+    this.audit("set_data_mode", mode.dataset === "test" ? mode.scenario : null);
     const title = SCENARIOS.find(
       (s) => mode.dataset === "test" && s.id === mode.scenario
     )?.title;
-    await this.persistMessages([
-      ...this.messages,
-      {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        parts: [
-          {
-            type: "text",
-            text: title
-              ? `Switched to test mode: ${title}. Figures are fixture data.`
-              : "Switched to live data."
-          }
-        ]
-      }
-    ]);
+    await this.appendNotice(
+      title
+        ? `Switched to test mode: ${title}. Figures are fixture data.`
+        : "Switched to live data."
+    );
     return mode;
   }
 
@@ -337,18 +353,11 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
     }
     const result = readConfig(this.env);
     if (!result.ok) return;
-    const last = addDays(period.end, -1);
-    const usage = await InvoiceBuddyAgent.usageSourceFactory(
-      result.config
-    ).fetchUsage(period.start, last);
-    const readable = usage.sources
-      .filter((s) => s.available)
-      .map((s) => s.service);
-    replaceUsage(sql, "live", readable, period.start, last, usage.records);
-    // A month with a failed product is fetched again next time it is asked for.
-    if (usage.sources.every((source) => source.available)) {
-      markPeriodSynced(sql, "live", period.start, new Date().toISOString());
-    }
+    await fetchClosedMonth(
+      sql,
+      InvoiceBuddyAgent.usageSourceFactory(result.config),
+      period
+    );
   }
 
   /**

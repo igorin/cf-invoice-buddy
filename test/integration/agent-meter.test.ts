@@ -86,7 +86,9 @@ describe("cost meter in the agent (UC-8)", () => {
     expect(rows[0]?.neurons).toBeCloseTo(15.496, 3);
     expect(state.selfCost.monthCostMicros).toBe(170);
     expect(state.selfCost.todayNeurons).toBeCloseTo(15.496, 3);
-    expect(state.selfCost.dailyBudgetNeurons).toBe(1_000);
+    expect(state.selfCost.dailyBudgetNeurons).toBe(
+      Number(env.DAILY_NEURON_BUDGET)
+    );
     expect(state.selfCost.unmeteredTurns).toBe(0);
   });
 

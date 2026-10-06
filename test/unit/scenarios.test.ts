@@ -7,6 +7,7 @@ import {
   precedingPeriods
 } from "../../src/domain/periods";
 import {
+  INJECTED_ZONE_NAME,
   SCENARIOS,
   buildScenario,
   isScenarioId,
@@ -39,6 +40,7 @@ describe("scenario list (UC-10)", () => {
       "usage-spike",
       "lower-no-cause",
       "new-service",
+      "injected-text",
       "zero-bill"
     ]);
     expect(SCENARIOS.every((s) => s.title && s.description)).toBe(true);
@@ -92,6 +94,15 @@ describe.each(TODAYS)("scenarios built for %s", (today) => {
     expect(summary.rows.every((row) => row.billed.status === "none")).toBe(
       true
     );
+  });
+});
+
+describe("injected-text", () => {
+  it("carries the instruction-like zone name into a finding, as data", () => {
+    const today = isoDate("2026-10-05");
+    const result = detect(buildScenario("injected-text", today), today);
+    const zone = result.findings.find((f) => f.detector === "zone-change");
+    expect(zone?.statement).toContain(INJECTED_ZONE_NAME);
   });
 });
 

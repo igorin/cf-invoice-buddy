@@ -1,5 +1,5 @@
-import { compareToBaseline, type ServiceDelta } from "./breakdown";
-import { formatUsd, micros, type Micros } from "./money";
+import { compareToBaseline } from "./breakdown";
+import { formatUsd, micros } from "./money";
 import type {
   DetectorId,
   DetectorInput,
@@ -9,6 +9,7 @@ import type {
 } from "./findings";
 import { daysInPeriod, type IsoDate } from "./periods";
 import { reconcile } from "./reconcile";
+import { unexplained } from "./unexplained";
 import type { UsageRecord } from "./usage";
 
 export type {
@@ -35,14 +36,6 @@ const MIN_IMPACT_MICROS = 1_000_000;
 const LOW_DAYS_SHOWN = 3;
 
 type Records = ReadonlyArray<UsageRecord>;
-
-// The detectors whose impacts are counted against a service's change.
-const SERVICE_LEVEL: ReadonlySet<DetectorId> = new Set([
-  "usage-spike",
-  "usage-drop",
-  "new-service",
-  "removed-service"
-]);
 
 const costOf = (records: Records): number =>
   records.reduce((total, record) => total + (record.costMicros ?? 0), 0);
@@ -339,29 +332,6 @@ function detectInvoiceVariance(input: DetectorInput): Finding[] {
       `The invoice is ${formatUsd(input.invoiceMicros)} and the usage for the period adds up to ${formatUsd(usage)}: a difference of ${usd(Math.abs(result.varianceMicros))}.`
     )
   ];
-}
-
-/** The change in each service that service-level findings do not account for. */
-function unexplained(
-  deltaMicros: Micros,
-  services: ReadonlyArray<ServiceDelta>,
-  findings: ReadonlyArray<Finding>
-): Micros {
-  const explained = services.reduce((total, service) => {
-    const claimed = findings
-      .filter(
-        (f) => f.service === service.service && SERVICE_LEVEL.has(f.detector)
-      )
-      .reduce((n, f) => n + f.impactMicros, 0);
-    // A finding can never explain more than the service actually changed.
-    const delta = service.deltaMicros;
-    const capped =
-      delta >= 0
-        ? Math.min(Math.max(claimed, 0), delta)
-        : Math.max(Math.min(claimed, 0), delta);
-    return total + capped;
-  }, 0);
-  return micros(deltaMicros - explained);
 }
 
 /** Runs every detector. Findings are ordered by the size of their impact. */

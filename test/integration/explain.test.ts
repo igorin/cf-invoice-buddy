@@ -229,7 +229,7 @@ describe("bill explanation as given to the model", () => {
       "I can't explain this difference from the account's data."
     );
     expect(described.instruction).toContain(
-      "Do not suggest any possible reason."
+      "Never suggest a reason of your own."
     );
   });
 
@@ -266,7 +266,7 @@ describe("getAssistantCost (UC-8)", () => {
     });
     expect(report.today).toEqual({
       neurons: "15.5",
-      dailyBudget: "1,000 neurons"
+      dailyBudget: `${Number(env.DAILY_NEURON_BUDGET).toLocaleString("en-US")} neurons`
     });
     expect(report.lastDays).toHaveLength(1);
     expect(report.limits).toHaveLength(3);
