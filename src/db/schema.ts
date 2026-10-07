@@ -139,6 +139,30 @@ export const MIGRATIONS: ReadonlyArray<{
       `CREATE INDEX IF NOT EXISTS credit_requests_period
         ON credit_requests (dataset, period_start, service)`
     ]
+  },
+  {
+    // Invoice closes (UC-6): one row per period and dataset, holding the
+    // frozen usage and the summary the owner approves.
+    id: 7,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS invoice_closes (
+        dataset TEXT NOT NULL,
+        period_start TEXT NOT NULL,
+        period_end TEXT NOT NULL,
+        workflow_id TEXT NOT NULL,
+        state TEXT NOT NULL,
+        snapshot_json TEXT,
+        summary_json TEXT,
+        approved_at TEXT,
+        decided_reason TEXT,
+        started_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        closed_at TEXT,
+        PRIMARY KEY (dataset, period_start)
+      )`,
+      `CREATE INDEX IF NOT EXISTS invoice_closes_workflow
+        ON invoice_closes (workflow_id)`
+    ]
   }
 ];
 

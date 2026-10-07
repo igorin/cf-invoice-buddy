@@ -75,7 +75,14 @@ describe("selectCases: which evaluation cases a change calls for", () => {
   });
 
   it("finds every real case from at least one area", () => {
-    const known = new Set(["explain", "usage", "docs", "cost", "credit"]);
+    const known = new Set([
+      "explain",
+      "usage",
+      "docs",
+      "cost",
+      "credit",
+      "close"
+    ]);
     for (const item of CASES) {
       expect(item.areas.length, item.id).toBeGreaterThan(0);
       expect(

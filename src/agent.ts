@@ -1,9 +1,9 @@
 import {
-  AIChatAgent,
   type ChatResponseResult,
   type OnChatMessageOptions
 } from "@cloudflare/ai-chat";
 import { callable } from "agents";
+import { LIVE_ANCHOR_DAY, RecordsAgent } from "./agent-records";
 import {
   convertToModelMessages,
   pruneMessages,
@@ -46,16 +46,6 @@ import {
   hasVisibleReply,
   isLooping
 } from "./services/turn-guard";
-import {
-  draftCredit,
-  listCreditViews,
-  reportCreditOutcome,
-  type CreditView,
-  type DraftRequest,
-  type DraftResult,
-  type OutcomeRequest,
-  type OutcomeResult
-} from "./services/credit-service";
 import { readUsageSummaryView } from "./services/usage-summary-service";
 import { fetchClosedMonth, syncCurrentPeriod } from "./services/usage-sync";
 import {
@@ -74,8 +64,6 @@ const MAX_STEPS_PER_TURN = 5;
 const STREAM_STALL_TIMEOUT_MS = 45_000;
 export const SMOKE_SUFFIX = "-smoke";
 const MAX_QUERY_CHARS = 200;
-// Audit entries for what the owner did or said; the rest are the agent's.
-const OWNER_ACTIONS = new Set(["set_data_mode", "credit_outcome"]);
 
 export const NO_ANSWER_MESSAGE =
   "I couldn't complete that answer. Please try asking again, or rephrase the question.";
@@ -83,8 +71,6 @@ export const NO_ANSWER_MESSAGE =
 export const BUDGET_EXHAUSTED_MESSAGE =
   "This assistant's usage budget for the last 24 hours is used up. It frees up as earlier usage passes the 24-hour mark.";
 
-// Accounts with no billing cycle are summarised by calendar month.
-const LIVE_ANCHOR_DAY = 1;
 const SYNC_CRON = "0 */6 * * *";
 
 export * from "./agent-state";
@@ -96,7 +82,7 @@ import {
 } from "./agent-state";
 export { MODEL_ID, createModel } from "./model";
 
-export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
+export class InvoiceBuddyAgent extends RecordsAgent {
   static modelFactory: (env: Env, request?: ModelRequest) => LanguageModel =
     createModel;
   static clock: () => Date = () => new Date();
@@ -118,6 +104,7 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
     // State saved by an earlier version may lack newer fields.
     this.setState({ ...INITIAL_STATE, ...this.state });
     this.publishSelfCost();
+    this.publishApprovals();
     // Cron schedules are idempotent, so this is safe on every start.
     await this.schedule(SYNC_CRON, "syncUsage");
   }
@@ -199,18 +186,6 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
     ]);
   }
 
-  private audit(
-    action: string,
-    subject: string | null,
-    detail?: unknown
-  ): void {
-    this.sql`
-      INSERT INTO audit_log (at, actor, action, subject_id, dataset, detail_json)
-      VALUES (${new Date().toISOString()}, ${OWNER_ACTIONS.has(action) ? "owner" : "agent"},
-        ${action}, ${subject}, ${this.state.dataMode.dataset},
-        ${detail === undefined ? null : JSON.stringify(detail)})`;
-  }
-
   /** Hands over, once, the model streams recorded since the last call. */
   @callable()
   takeRecordedCalls(): RecordedCall[] {
@@ -267,6 +242,7 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
         ? { dataset }
         : loadScenario(this.ctx.storage.sql, scenario, this.today());
     this.setState({ ...this.state, dataMode: mode });
+    this.publishApprovals();
     this.audit("set_data_mode", mode.dataset === "test" ? mode.scenario : null);
     const title = SCENARIOS.find(
       (s) => mode.dataset === "test" && s.id === mode.scenario
@@ -292,38 +268,6 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
       anchorDay: LIVE_ANCHOR_DAY,
       ensurePeriod: (period) => this.ensurePeriod(mode.dataset, period, today)
     });
-  }
-
-  /** Writes and stores a credit request draft (UC-3). Submits nothing. */
-  @callable()
-  async draftCreditRequest(request: DraftRequest): Promise<DraftResult> {
-    const explanation = await this.explainBill(
-      request.month ? { month: request.month } : {}
-    );
-    const sql = this.ctx.storage.sql;
-    const result = draftCredit(sql, explanation, request, new Date());
-    if (result.status === "drafted" || result.status === "replaced") {
-      this.audit("credit_draft", result.request.id, result.status);
-    }
-    return result;
-  }
-
-  /** The drafts written so far, in the current data mode (UC-4). */
-  @callable()
-  getCreditRequests(): CreditView[] {
-    return listCreditViews(this.ctx.storage.sql, this.state.dataMode.dataset);
-  }
-
-  /** Stores what the owner says became of a request (UC-4). Never verified. */
-  @callable()
-  recordCreditOutcome(request: OutcomeRequest): OutcomeResult {
-    const dataset = this.state.dataMode.dataset;
-    const sql = this.ctx.storage.sql;
-    const result = reportCreditOutcome(sql, dataset, request, new Date());
-    if (result.status === "recorded") {
-      this.audit("credit_outcome", result.request.id, result.request.state);
-    }
-    return result;
   }
 
   /** What the assistant itself has cost (UC-8). Always real, in either mode. */
@@ -372,7 +316,7 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
       : result.config.DAILY_NEURON_BUDGET;
   }
 
-  private today(): IsoDate {
+  protected today(): IsoDate {
     return isoDate(InvoiceBuddyAgent.clock().toISOString().slice(0, 10));
   }
 

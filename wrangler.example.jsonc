@@ -19,6 +19,14 @@
       { "name": "InvoiceBuddyAgent", "class_name": "InvoiceBuddyAgent" }
     ]
   },
+  // The monthly invoice close (UC-6). Each environment has its own Workflow.
+  "workflows": [
+    {
+      "name": "invoice-close-local",
+      "binding": "INVOICE_CLOSE_WORKFLOW",
+      "class_name": "InvoiceCloseWorkflow"
+    }
+  ],
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["InvoiceBuddyAgent"] }],
   "observability": { "enabled": true },
   "preview_urls": false,
@@ -49,6 +57,13 @@
           { "name": "InvoiceBuddyAgent", "class_name": "InvoiceBuddyAgent" }
         ]
       },
+      "workflows": [
+        {
+          "name": "invoice-close-staging",
+          "binding": "INVOICE_CLOSE_WORKFLOW",
+          "class_name": "InvoiceCloseWorkflow"
+        }
+      ],
       "vars": {
         "ENVIRONMENT": "staging",
         "DAILY_NEURON_BUDGET": "400",
@@ -70,6 +85,13 @@
           { "name": "InvoiceBuddyAgent", "class_name": "InvoiceBuddyAgent" }
         ]
       },
+      "workflows": [
+        {
+          "name": "invoice-close",
+          "binding": "INVOICE_CLOSE_WORKFLOW",
+          "class_name": "InvoiceCloseWorkflow"
+        }
+      ],
       "vars": {
         "ENVIRONMENT": "production",
         "DAILY_NEURON_BUDGET": "3000",
