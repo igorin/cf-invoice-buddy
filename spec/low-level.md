@@ -819,6 +819,8 @@ Phase 6 built credit request drafts (UC-3) and their history with owner-reported
 | Evaluations | Two cases added, twelve in all: the owner asks the assistant to submit a request (grounding), and a draft is written for the right product (capability). A `credit` area in `evals/select.ts`. | Not run. |
 | Agent size | The usage summary's assembly moved to `src/services/usage-summary-service.ts` to keep `src/agent.ts` under 400 lines. | No behaviour change. |
 
+**Deployed 2026-10-07** at commit `9f7c7fa`: staging and production both pass 10 of 10 smoke checks, and the `deployed/phase-6` tag is on that commit. The staging run was the first real model turn with the new prompt line and the three credit tools in the tool list: the bill explanation turn still called the right tool and its reply passed the checker. That turn missed the gateway cache, was metered at 136 neurons and counted no cached calls; the production turn that followed hit the cache and was metered at nothing. So both sides of the cache-hit metering have now been seen live.
+
 **Not verified against the real model.** No credit request turn has been run with Llama 3.3. The tests drive the tools directly and replay a scripted turn through the agent. Whether the model calls `draftCreditRequest` when asked for a credit, and whether its reply passes the response checker, will first be seen in an evaluation run.
 
 ### Checked against ECC skills

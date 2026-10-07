@@ -7,7 +7,7 @@ Specs are in [spec/](spec/).
 
 Last updated 2026-10-07. The build follows nine phases set out in [spec/low-level.md](spec/low-level.md), section 15. Each phase must be deployed to Cloudflare and pass a smoke test before the next begins.
 
-**Phases 1 to 5 of 9 are deployed.** They run in staging and production behind Cloudflare Access, and both environments pass the smoke test. Full test run takes a significant amount of daily neurons and production deployments with full end to end test pass can be done ~1 a day.
+**Phases 1 to 6 of 9 are deployed.** They run in staging and production behind Cloudflare Access, and both environments pass the smoke test. Full test run takes a significant amount of daily neurons and production deployments with full end to end test pass can be done ~1 a day.
 
 | Phase | Scope | Status |
 | --- | --- | --- |
@@ -16,7 +16,7 @@ Last updated 2026-10-07. The build follows nine phases set out in [spec/low-leve
 | 3 | Usage data, usage summary panel, test mode | Deployed |
 | 4 | Bill explanations and the assistant's cost report | Deployed |
 | 5 | Documentation search and grounding checks, with each reply held until it is checked | Deployed |
-| 6 | Credit request drafts, history and owner-reported outcomes | Code complete; not yet deployed |
+| 6 | Credit request drafts, history and owner-reported outcomes | Deployed |
 | 7 | Monthly invoice close | Not started |
 | 8 | Plan comparison | Not started |
 | 9 | Release | Not started |
