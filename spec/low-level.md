@@ -765,10 +765,26 @@ On branch `experiment/cheaper-testing`, not merged. Prompted by research into te
 - A streamed Workers AI call through the gateway works: the smoke turn called its tool and returned a reply in both environments. This is also the first real-model turn through held replies and the shorter prompt; the reply was shown, not withheld, and all eight amounts in it came from the tool result.
 - The gateway cache served the second run at no cost in neurons. Each run metered 111.86 neurons in the app, 76 seconds apart, but the account's analytics show 112 neurons for that hour in total, unchanged seven minutes after the production run. One of the two turns was therefore not billed. This answers questions 1 and 2: a cache hit for a Workers AI model uses no neurons, and a streamed, two-call turn with a tool call is cached and replays in a form the app reads. It rests on one pair of runs and on analytics that can lag.
 - A staging deploy followed by its production deploy now costs one smoke turn, about 112 neurons, where it cost two.
-- The app's meter counted the cached turn as 111.86 neurons, so it overstates use by the amount cached. That errs on the safe side for the budget.
+- The app's meter counted the cached turn as 111.86 neurons, so it overstates use by the amount cached. That errs on the safe side for the budget. Corrected on 2026-10-07; see "Cache hits left out of the meter" below.
 - Still open: questions 3 and 4. No recording has been made and the cheaper model is still off.
 
 Known costs: a cached smoke turn no longer proves the model answered for that deploy; with the cheaper model the smoke test no longer exercises the chat model at all; the cost meter counts a cached turn's tokens as if they were billed. The owner created the gateway `invoice-buddy-smoke` in the account on 2026-10-06. Since the Wrangler configuration left git, `AI_GATEWAY_ID` is empty in the template and set to that name only in the owner's local `wrangler.jsonc`, for staging and production. `SMOKE_MODEL_ID` is left unset until a live call shows the cheaper model calls tools. Nothing from this branch is deployed.
+
+### Cache hits left out of the meter (2026-10-07)
+
+Decided by the owner: a model call the gateway served from its cache is not counted as usage; a call with any other cache status, or none, is.
+
+| Item | What was built | Notes |
+| --- | --- | --- |
+| Detection | `src/domain/cache-status.ts`. `withCacheStatus` wraps the AI binding for calls that go through the gateway. It makes each streamed call with the binding's `returnRawResponse` option, reads the `cf-aig-cache-status` response header, and hands the stream on as before. | Only the value `HIT` counts as a hit. A missing header, any other value, a binding that returns only a stream, and a failed call all count as usage. No gateway log lookup is made. |
+| Errors | With `returnRawResponse` a failed call comes back as a response, so the wrapper throws with the status and body. | Keeps Cloudflare's allowance message recognisable to `describeTurnError`. |
+| Meter | `billedUsage` in `src/domain/self-cost.ts` adds up the token usage of the steps that were not hits. `recordTurn` stores the result. | The hits are matched to steps by order. If their number differs from the number of steps, for example after a retried call, the whole turn is counted. |
+| Record | Migration 5 adds `self_cached_calls`. A turn served wholly from the cache is a metered row with zero neurons, not an unmetered turn. | The cost report has `modelCallsServedFromCache`; `state.selfCost` has `cachedCalls`. |
+| Smoke test | Its metering check passes when the turn raised the meter or was counted as served from the cache. | A turn that did neither still fails the check. |
+| Scope | Only the smoke-test instance in a deployed environment calls the model through the gateway, so only its meter changes. | |
+
+**Direction of error.** Before, the meter could only overstate usage. It can now understate it if the gateway reported a hit for a call that was billed. Nothing observed suggests it does.
+
 ### Wrangler configuration moved out of git (2026-10-06)
 
 Decided by the owner. `wrangler.jsonc` was renamed to `wrangler.example.jsonc` and `wrangler.jsonc` (with `wrangler.json` and `wrangler.toml`) added to `.gitignore`. The README has the setup steps.

@@ -10,6 +10,8 @@ export type SelfCost = Readonly<{
   windowNeurons: number;
   dailyBudgetNeurons: number;
   unmeteredTurns: number;
+  /** Model calls this month that the gateway cache served, at no cost. */
+  cachedCalls: number;
 }>;
 
 export type DataMode =
@@ -37,7 +39,8 @@ export const INITIAL_STATE: AgentState = {
     monthCostMicros: 0,
     windowNeurons: 0,
     dailyBudgetNeurons: 0,
-    unmeteredTurns: 0
+    unmeteredTurns: 0,
+    cachedCalls: 0
   },
   dataMode: { dataset: "live" },
   lastSyncAt: null

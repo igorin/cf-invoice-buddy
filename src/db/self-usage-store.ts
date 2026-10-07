@@ -52,6 +52,12 @@ export function readCostReport(
       monthStart
     )
   );
+  const cached = first(
+    sql.exec(
+      "SELECT SUM(calls) AS calls FROM self_cached_calls WHERE at >= ?",
+      monthStart
+    )
+  );
   const days = sql.exec(
     `SELECT substr(at, 1, 10) AS day, COUNT(*) AS turns,
       SUM(neurons) AS neurons, SUM(cost_micros) AS cost
@@ -67,7 +73,8 @@ export function readCostReport(
       outputTokens: count(month.output),
       chatTurns: count(month.turns),
       unmeteredTurns: count(month.unmetered),
-      turnsRefusedOverBudget: count(refused.refused)
+      turnsRefusedOverBudget: count(refused.refused),
+      modelCallsServedFromCache: count(cached.calls)
     },
     last24Hours: {
       neurons: count(neuronsInWindow),
@@ -82,7 +89,8 @@ export function readCostReport(
     limits: [
       "The cost is at list price, before Cloudflare's free daily allocation, which is shared across the whole account. The amount actually billed can be lower.",
       "This is the assistant's own meter, not the invoice. The invoice does not separate the assistant's charges.",
-      "Only model calls are metered. The assistant's Worker, Durable Object and Workflow usage is not included."
+      "Only model calls are metered. The assistant's Worker, Durable Object and Workflow usage is not included.",
+      "A model call served from the AI Gateway cache uses no neurons and is not counted. Only the smoke-test instance uses the cache."
     ],
     priceSource: `${LLAMA_3_3_PRICE.source} (checked ${LLAMA_3_3_PRICE.checkedOn})`
   };
@@ -103,9 +111,12 @@ export function describeOwnUsage(sql: Sql, period: BillingPeriod): string {
 }
 
 export type TurnUsage = Readonly<{
+  /** Tokens of the model calls that were billed. */
   inputTokens: number | undefined;
   outputTokens: number | undefined;
   steps: number;
+  /** Model calls the gateway served from its cache; they used no neurons. */
+  cachedSteps?: number;
 }>;
 
 /** Writes one meter row for a chat turn. Nothing is estimated (UC-8). */
@@ -125,7 +136,26 @@ export function recordTurn(
     model
   );
   const at = new Date().toISOString();
-  if (turn.metered) {
+  const cachedSteps = usage.cachedSteps ?? 0;
+  if (cachedSteps > 0) {
+    sql.exec(
+      "INSERT INTO self_cached_calls (at, model, calls) VALUES (?, ?, ?)",
+      at,
+      model,
+      cachedSteps
+    );
+  }
+  if (usage.steps > 0 && cachedSteps === usage.steps) {
+    // Every call came from the cache: a metered turn that used nothing.
+    sql.exec(
+      `INSERT INTO self_usage
+        (at, model, steps, input_tokens, output_tokens, neurons, cost_micros, metered)
+       VALUES (?, ?, ?, 0, 0, 0, 0, 1)`,
+      at,
+      model,
+      usage.steps
+    );
+  } else if (turn.metered) {
     sql.exec(
       `INSERT INTO self_usage
         (at, model, steps, input_tokens, output_tokens, neurons, cost_micros, metered)
@@ -187,7 +217,7 @@ export function readNeuronsInWindow(sql: Sql, now: Date): number {
 export function readMonthCost(
   sql: Sql,
   today: IsoDate
-): { costMicros: number; unmeteredTurns: number } {
+): { costMicros: number; unmeteredTurns: number; cachedCalls: number } {
   const row = first(
     sql.exec(
       `SELECT SUM(cost_micros) AS cost,
@@ -196,8 +226,15 @@ export function readMonthCost(
       `${today.slice(0, 7)}-01`
     )
   );
+  const cached = first(
+    sql.exec(
+      "SELECT SUM(calls) AS calls FROM self_cached_calls WHERE at >= ?",
+      `${today.slice(0, 7)}-01`
+    )
+  );
   return {
     costMicros: Number(row.cost ?? 0),
-    unmeteredTurns: Number(row.unmetered ?? 0)
+    unmeteredTurns: Number(row.unmetered ?? 0),
+    cachedCalls: Number(cached.calls ?? 0)
   };
 }

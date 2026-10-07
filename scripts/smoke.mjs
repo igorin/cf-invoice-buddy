@@ -395,16 +395,20 @@ await check(
         show(`the reply repeats words (${Math.round(ratio * 100)}%)`)
       );
       expect(after, "no meter state received after the turn");
+      // A turn the gateway cache served uses no neurons; it must then be
+      // counted as cached, so that no turn goes unaccounted for.
+      const servedFromCache =
+        (after.cachedCalls ?? 0) > (before.cachedCalls ?? 0);
       expect(
-        after.windowNeurons > before.windowNeurons,
-        "the turn was not metered"
+        after.windowNeurons > before.windowNeurons || servedFromCache,
+        "the turn was neither metered nor counted as served from the cache"
       );
       expect(
         after.unmeteredTurns === before.unmeteredTurns,
         "the turn was recorded as unmetered"
       );
       console.log(
-        `  ${amounts.length} amounts stated, all from the tool result; labelled as test data; meter: ${before.windowNeurons.toFixed(2)} → ${after.windowNeurons.toFixed(2)} neurons in 24 hours`
+        `  ${amounts.length} amounts stated, all from the tool result; labelled as test data; meter: ${before.windowNeurons.toFixed(2)} → ${after.windowNeurons.toFixed(2)} neurons in 24 hours; model calls served from cache: ${(after.cachedCalls ?? 0) - (before.cachedCalls ?? 0)}`
       );
     } finally {
       await agent.call("setDataMode", ["live"]);

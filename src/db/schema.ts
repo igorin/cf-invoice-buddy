@@ -102,6 +102,19 @@ export const MIGRATIONS: ReadonlyArray<{
         PRIMARY KEY (dataset, period_start)
       )`
     ]
+  },
+  {
+    // Model calls the AI Gateway cache served, which used no neurons.
+    id: 5,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS self_cached_calls (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        at TEXT NOT NULL,
+        model TEXT NOT NULL,
+        calls INTEGER NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS self_cached_calls_at ON self_cached_calls (at)`
+    ]
   }
 ];
 

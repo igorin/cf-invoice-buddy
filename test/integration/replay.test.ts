@@ -256,6 +256,48 @@ describe("createModel for the smoke-test instance", () => {
     });
   });
 
+  it("reports whether the gateway served each call from its cache", async () => {
+    const seen: boolean[] = [];
+    const statuses = ["HIT", "MISS"];
+    const AI = {
+      run: async () =>
+        new Response(answer("ok").chunks.join(""), {
+          headers: {
+            "content-type": "text/event-stream",
+            "cf-aig-cache-status": statuses.shift() ?? ""
+          }
+        })
+    };
+    const staging = {
+      ...env,
+      ENVIRONMENT: "staging",
+      AI_GATEWAY_ID: "invoice-buddy-smoke",
+      AI
+    } as unknown as Env;
+    const model = createModel(staging, {
+      smoke: true,
+      onCacheStatus: (hit) => seen.push(hit)
+    });
+    expect(await ask(model)).toBe("ok");
+    expect(await ask(model)).toBe("ok");
+    expect(seen).toEqual([true, false]);
+  });
+
+  it("does not ask about the cache for a call that does not go through the gateway", async () => {
+    const { env: staging, runs } = fakeEnv({ ENVIRONMENT: "staging" });
+    const seen: boolean[] = [];
+    await ask(
+      createModel(staging, {
+        smoke: true,
+        onCacheStatus: (hit) => seen.push(hit)
+      })
+    );
+    expect(seen).toEqual([]);
+    expect(JSON.stringify(runs[0]?.options ?? {})).not.toContain(
+      "returnRawResponse"
+    );
+  });
+
   it("sends an owner's calls straight to the chat model", async () => {
     const { env: staging, runs } = fakeEnv({
       ENVIRONMENT: "staging",

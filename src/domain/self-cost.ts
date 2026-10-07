@@ -86,6 +86,52 @@ export function meterTurn(
   };
 }
 
+export type StepUsage = Readonly<{
+  inputTokens?: number | undefined;
+  outputTokens?: number | undefined;
+}>;
+
+export type BilledUsage = Readonly<{
+  inputTokens: number | undefined;
+  outputTokens: number | undefined;
+  steps: number;
+  /** Model calls served from the gateway cache, which used no neurons. */
+  cachedSteps: number;
+}>;
+
+/**
+ * The token usage of a turn that was billed: every model call except those
+ * the gateway served from its cache. `cacheHits` holds one entry per call, in
+ * order. If it does not line up with the steps, for example after a retried
+ * call, nothing is treated as cached and the whole turn is counted.
+ */
+export function billedUsage(
+  steps: ReadonlyArray<StepUsage>,
+  cacheHits: ReadonlyArray<boolean>
+): BilledUsage {
+  const aligned = cacheHits.length === steps.length;
+  const billed = steps.filter((_, index) => !(aligned && cacheHits[index]));
+  const cachedSteps = steps.length - billed.length;
+  if (billed.length === 0) {
+    return {
+      inputTokens: steps.length === 0 ? undefined : 0,
+      outputTokens: steps.length === 0 ? undefined : 0,
+      steps: steps.length,
+      cachedSteps
+    };
+  }
+  // A billed call with no token count leaves the turn unmetered (UC-8).
+  const unknown = billed.some((step) => step.inputTokens === undefined);
+  const sum = (pick: (step: StepUsage) => number | undefined) =>
+    billed.reduce((total, step) => total + (pick(step) ?? 0), 0);
+  return {
+    inputTokens: unknown ? undefined : sum((step) => step.inputTokens),
+    outputTokens: unknown ? undefined : sum((step) => step.outputTokens),
+    steps: steps.length,
+    cachedSteps
+  };
+}
+
 /** Compares the neurons used in the budget window with the budget. */
 export function checkBudget(
   neuronsUsed: number,

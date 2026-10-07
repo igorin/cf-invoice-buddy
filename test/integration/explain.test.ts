@@ -262,14 +262,15 @@ describe("getAssistantCost (UC-8)", () => {
       outputTokens: "31",
       chatTurns: "2",
       unmeteredTurns: "1",
-      turnsRefusedOverBudget: "0"
+      turnsRefusedOverBudget: "0",
+      modelCallsServedFromCache: "0"
     });
     expect(report.last24Hours).toEqual({
       neurons: "15.5",
       budget: `${Number(env.DAILY_NEURON_BUDGET).toLocaleString("en-US")} neurons per 24 hours`
     });
     expect(report.lastDays).toHaveLength(1);
-    expect(report.limits).toHaveLength(3);
+    expect(report.limits).toHaveLength(4);
     expect(report.notice).toContain("never test data");
     expect(report.priceSource).toContain("developers.cloudflare.com");
   });

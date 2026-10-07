@@ -31,7 +31,7 @@ import {
   type IsoDate
 } from "./domain/periods";
 import { SCENARIOS } from "./domain/scenarios";
-import { checkBudget } from "./domain/self-cost";
+import { billedUsage, checkBudget } from "./domain/self-cost";
 import { buildUsageSummary } from "./domain/usage-summary";
 import type {
   BillingSource,
@@ -130,10 +130,13 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
     }
 
     const smoke = this.name.endsWith(SMOKE_SUFFIX);
+    // One entry per model call: did the gateway cache serve it?
+    const cacheHits: boolean[] = [];
     const result = streamText({
       model: InvoiceBuddyAgent.modelFactory(this.env, {
         smoke,
-        onRecordedCall: (call) => this.recordedCalls.push(call)
+        onRecordedCall: (call) => this.recordedCalls.push(call),
+        onCacheStatus: (hit) => cacheHits.push(hit)
       }),
       system: buildSystemPrompt(this.today()),
       messages: pruneMessages({
@@ -145,14 +148,14 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
       // Stops at the step limit, or sooner if the turn is going in circles.
       stopWhen: [stepCountIs(MAX_STEPS_PER_TURN), isLooping],
       abortSignal: options?.abortSignal,
-      onFinish: ({ totalUsage, steps }) => {
+      onFinish: ({ steps }) => {
+        // Calls the gateway served from its cache used no neurons.
         recordTurn(
           this.ctx.storage.sql,
-          {
-            inputTokens: totalUsage.inputTokens,
-            outputTokens: totalUsage.outputTokens,
-            steps: steps.length
-          },
+          billedUsage(
+            steps.map((step) => step.usage),
+            cacheHits
+          ),
           chooseModel(this.env, smoke).modelId,
           this.today()
         );
@@ -369,7 +372,8 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
         monthCostMicros: month.costMicros,
         windowNeurons: this.neuronsInWindow(),
         dailyBudgetNeurons: this.dailyBudget(),
-        unmeteredTurns: month.unmeteredTurns
+        unmeteredTurns: month.unmeteredTurns,
+        cachedCalls: month.cachedCalls
       }
     });
   }

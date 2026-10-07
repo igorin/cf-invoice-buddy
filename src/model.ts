@@ -1,6 +1,7 @@
 import type { LanguageModel } from "ai";
 import { createWorkersAI } from "workers-ai-provider";
 import { readConfig } from "./config";
+import { withCacheStatus } from "./domain/cache-status";
 import { withDedupedStream } from "./domain/dedupe-stream";
 import { withRecording, type RecordedCall } from "./domain/model-recording";
 import { CHAT_MODEL_ID } from "./domain/models";
@@ -14,6 +15,8 @@ export type ModelRequest = Readonly<{
   /** True for the smoke-test instance, the only one the options below reach. */
   smoke: boolean;
   onRecordedCall?: (call: RecordedCall) => void;
+  /** Called once per model call: was it served from the gateway cache? */
+  onCacheStatus?: (servedFromCache: boolean) => void;
 }>;
 
 export type ModelChoice = Readonly<{
@@ -54,10 +57,15 @@ export function createModel(
   request: ModelRequest = { smoke: false }
 ): LanguageModel {
   const choice = chooseModel(env, request.smoke);
-  const binding =
+  const recorded =
     choice.record && request.onRecordedCall
       ? withRecording(env.AI, request.onRecordedCall)
       : env.AI;
+  // Only a call through the gateway can be a cache hit.
+  const binding =
+    choice.gateway && request.onCacheStatus
+      ? withCacheStatus(recorded, request.onCacheStatus)
+      : recorded;
   // Llama 3.3 streams each text chunk in two fields; see dedupe-stream.ts.
   const workersai = createWorkersAI({
     binding: withDedupedStream(binding),

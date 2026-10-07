@@ -97,6 +97,48 @@ describe("cost meter in the agent (UC-8)", () => {
     expect(state.selfCost.unmeteredTurns).toBe(0);
   });
 
+  it("counts nothing for a turn the gateway cache served, and counts the cached call", async () => {
+    InvoiceBuddyAgent.modelFactory = (_env, request) => {
+      request?.onCacheStatus?.(true);
+      return mockModel(343, 31);
+    };
+
+    const { rows, state } = await sendTurn("meter-cached");
+
+    expect(rows).toEqual([
+      { metered: 1, input_tokens: 0, neurons: 0, cost_micros: 0 }
+    ]);
+    expect(state.selfCost.windowNeurons).toBe(0);
+    expect(state.selfCost.monthCostMicros).toBe(0);
+    expect(state.selfCost.unmeteredTurns).toBe(0);
+    expect(state.selfCost.cachedCalls).toBe(1);
+  });
+
+  it("counts a turn in full when the gateway reports anything but a hit", async () => {
+    InvoiceBuddyAgent.modelFactory = (_env, request) => {
+      request?.onCacheStatus?.(false);
+      return mockModel(343, 31);
+    };
+
+    const { rows, state } = await sendTurn("meter-miss");
+
+    expect(rows[0]).toMatchObject({ metered: 1, input_tokens: 343 });
+    expect(state.selfCost.cachedCalls).toBe(0);
+  });
+
+  it("counts a turn in full when the cache record does not match its calls", async () => {
+    InvoiceBuddyAgent.modelFactory = (_env, request) => {
+      request?.onCacheStatus?.(true);
+      request?.onCacheStatus?.(true);
+      return mockModel(343, 31);
+    };
+
+    const { rows, state } = await sendTurn("meter-misaligned");
+
+    expect(rows[0]).toMatchObject({ metered: 1, input_tokens: 343 });
+    expect(state.selfCost.cachedCalls).toBe(0);
+  });
+
   it("records a turn with zero input tokens as unmetered and estimates nothing", async () => {
     InvoiceBuddyAgent.modelFactory = () => mockModel(0, 0);
 
