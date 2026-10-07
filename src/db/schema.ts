@@ -115,6 +115,30 @@ export const MIGRATIONS: ReadonlyArray<{
       )`,
       `CREATE INDEX IF NOT EXISTS self_cached_calls_at ON self_cached_calls (at)`
     ]
+  },
+  {
+    // Credit request drafts and what the owner reports about them (UC-3, UC-4).
+    id: 6,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS credit_requests (
+        id TEXT PRIMARY KEY,
+        dataset TEXT NOT NULL,
+        period_start TEXT NOT NULL,
+        service TEXT NOT NULL,
+        amount TEXT,
+        basis TEXT NOT NULL,
+        owner_reason TEXT NOT NULL,
+        draft TEXT NOT NULL,
+        evidence_json TEXT NOT NULL,
+        state TEXT NOT NULL,
+        reported_amount TEXT,
+        reported_note TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS credit_requests_period
+        ON credit_requests (dataset, period_start, service)`
+    ]
   }
 ];
 

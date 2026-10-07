@@ -25,7 +25,7 @@ export type GroundingInput = Readonly<{
 }>;
 
 export type Violation = Readonly<{
-  rule: "G-1" | "G-3" | "G-4" | "G-7";
+  rule: "G-1" | "G-3" | "G-4" | "G-7" | "UC-3";
   detail: string;
 }>;
 
@@ -102,6 +102,12 @@ function causeWithoutFinding(input: GroundingInput): string | null {
     : null;
 }
 
+// The assistant drafts credit requests and never submits them (UC-3). This
+// catches a reply that says, in the first person, that it did or will.
+// "I cannot submit" and "you submit" do not match.
+const SUBMISSION_CLAIM =
+  /\bI(?:['’]ve| have|['’]ll| will| can| could)?(?: now| already| just| also)? (?:submit(?:ted)?|filed?|sent|send) (?:it|the|this|that|your|a)\b/i;
+
 export function checkGrounding(input: GroundingInput): Violation[] {
   const violations: Violation[] = [];
 
@@ -132,6 +138,14 @@ export function checkGrounding(input: GroundingInput): Violation[] {
     violations.push({
       rule: "G-7",
       detail: `links not from a tool result: ${composed.join(", ")}`
+    });
+  }
+
+  const claim = SUBMISSION_CLAIM.exec(input.text)?.[0];
+  if (claim) {
+    violations.push({
+      rule: "UC-3",
+      detail: `says the assistant submits requests: "${claim}"`
     });
   }
 

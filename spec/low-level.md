@@ -799,6 +799,28 @@ Decided by the owner. `wrangler.jsonc` was renamed to `wrangler.example.jsonc` a
 | Deploy guarantee | Before, a deploy's configuration was part of the merged commit. Now budgets, Worker names and variables come from a local file that no review or CI run has seen. The note above and the budget test on the local file are the only checks. |
 | History | Earlier versions of `wrangler.jsonc` remain in the repository's history. They never held secrets or account identifiers. |
 
+### Phase 6 implementation notes (2026-10-07)
+
+Phase 6 built credit request drafts (UC-3) and their history with owner-reported outcomes (UC-4). Where this differs from sections 4, 5 and 9, this list is current.
+
+| Topic | What was built | Note |
+| --- | --- | --- |
+| Draft | `src/domain/credit-draft.ts`: `gatherCreditEvidence` takes one product's line and findings from the bill explanation; `renderCreditDraft` fills a fixed template. The model writes none of it. | The amount requested is the product's charge above its usual amount. When the product costs the same or less than usual, or there is no earlier period, no amount is stated and the draft says why. |
+| Basis | A draft is "supported by the account's usage data" when a detector found something for that product, and otherwise says it rests on the owner's statement. | A finding about the whole account, such as a longer period, does not count as support for one product. Findings in the explanation now carry their product name for this. |
+| Submission steps | A constant in the same file, re-read from Cloudflare's support page on 2026-10-07: Support page, Billing, Create a Case, category, summary, Submit Case. A test fails when the check date is over 90 days old. | The page says Free plans may open billing cases. The earlier wording in this spec, "attach the invoice", is not on the page and was not used. |
+| Storage | Migration 6: `credit_requests`, keyed by `id`, with `dataset`, `period_start`, `service`, `amount`, `basis`, `owner_reason`, `draft`, `evidence_json`, `state`, `reported_amount`, `reported_note` and timestamps. | Section 4 has `amount_micros`. The explanation gives amounts as text, so the amount is stored as the text that appears in the draft; nothing computes with it. |
+| One draft per period and product | A second request returns the existing draft unchanged. With `replaceExisting` the old row becomes `superseded` and is kept. | |
+| Outcomes | `recordCreditOutcome` stores submitted, approved, partially approved or denied, with an optional amount and note, as the owner's report. Every state after `drafted` is worded "as reported by the account owner". | The tool needs the owner's approval before it runs, because it records the owner's word and a model could otherwise invent one. Not in section 5. The audit entry's actor is the owner. |
+| Tools | `draftCreditRequest`, `getCreditRequests`, `recordCreditOutcome` in `src/tools/credit-tools.ts`. Each result carries an instruction; the draft result says the model cannot submit and must not say it did. | The month input is loose, as for `explainBillChange`. |
+| Response checker | New rule, reported as UC-3: a reply that says in the first person that the assistant submitted or will submit something is withheld. | A phrase list, like the causal phrases: it will miss paraphrases. "I cannot submit" and "you submit" pass. |
+| Card | `src/components/credit-card.tsx` draws the result of all three tools: the draft with a copy button, its state, the basis, and the submission steps with the support link. Test-mode drafts carry "Test data. Do not submit." | Section 9 also lists a credit request list drawn from `state.creditRequests`. That was not built: history is shown by the card for `getCreditRequests`, and agent state has no credit list. Not yet viewed in a browser. |
+| Data modes | Drafts carry the dataset and are listed only in their own mode. | A smoke check covers this. |
+| Smoke test | A tenth check, with no model call: in test mode a draft is written for the spike scenario's Workers charges, its amount equals the stored overage, it is marked as test data, it is stored, and no test draft is listed with live data. | Each run replaces the smoke instance's draft, so one replaced row is added per run. |
+| Evaluations | Two cases added, twelve in all: the owner asks the assistant to submit a request (grounding), and a draft is written for the right product (capability). A `credit` area in `evals/select.ts`. | Not run. |
+| Agent size | The usage summary's assembly moved to `src/services/usage-summary-service.ts` to keep `src/agent.ts` under 400 lines. | No behaviour change. |
+
+**Not verified against the real model.** No credit request turn has been run with Llama 3.3. The tests drive the tools directly and replay a scripted turn through the agent. Whether the model calls `draftCreditRequest` when asked for a credit, and whether its reply passes the response checker, will first be seen in an evaluation run.
+
 ### Checked against ECC skills
 
 | Skill | Applied as |

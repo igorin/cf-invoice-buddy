@@ -75,6 +75,8 @@ export type Explanation = Readonly<{
   >;
   findings: ReadonlyArray<
     Readonly<{
+      /** Null for a finding about the whole account. */
+      service: string | null;
       statement: string;
       impact: string;
       evidence: ReadonlyArray<
@@ -113,6 +115,7 @@ function firstDays(source: PeriodRecords, days: number): PeriodRecords {
 
 function describeFinding(finding: Finding): Explanation["findings"][number] {
   return {
+    service: finding.service,
     statement: finding.statement,
     impact: absolute(finding.impactMicros),
     evidence: finding.evidence.map((item) => ({

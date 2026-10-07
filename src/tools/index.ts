@@ -7,6 +7,7 @@ import {
   MONTH_PATTERN,
   type ExplainRequest
 } from "../services/explain-service";
+import { buildCreditTools } from "./credit-tools";
 import { describeForModel } from "./explain-tool";
 import { describeSummaryForModel } from "./usage-summary-tool";
 
@@ -124,6 +125,7 @@ export function buildTools(agent: InvoiceBuddyAgent) {
           mode: await agent.setDataMode(dataset, scenario)
         };
       }
-    })
+    }),
+    ...buildCreditTools(agent)
   };
 }

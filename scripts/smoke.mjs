@@ -319,6 +319,61 @@ await check(
 );
 
 await check(
+  "a credit request is drafted from stored data, kept, and marked as test data (UC-3, UC-4)",
+  async () => {
+    expect(agent, "no agent session");
+    await agent.call("setDataMode", ["test", SPIKE_SCENARIO]);
+    try {
+      const facts = await agent.call("explainBill");
+      const workers = facts.services.find((line) => line.service === "Workers");
+      expect(workers, "the scenario has no Workers charges");
+      // No model call: the draft is a template filled from stored data.
+      const result = await agent.call("draftCreditRequest", [
+        {
+          service: "Workers",
+          ownerReason: "Smoke test of the draft.",
+          replaceExisting: true
+        }
+      ]);
+      expect(
+        result.status === "drafted" || result.status === "replaced",
+        `status is ${result.status}`
+      );
+      const { request, submission } = result;
+      expect(
+        request.amount === workers.difference,
+        "the amount requested is not the Workers overage from the stored data"
+      );
+      expect(
+        request.draft.startsWith("Test data. Do not submit."),
+        "a draft made from test data is not marked"
+      );
+      expect(
+        submission.url.startsWith("https://developers.cloudflare.com/"),
+        "the submission link is not Cloudflare's documentation"
+      );
+      const stored = await agent.call("getCreditRequests");
+      expect(
+        stored.some(
+          (item) => item.id === request.id && item.state === "drafted"
+        ),
+        "the draft was not stored"
+      );
+      console.log(
+        `  draft ${request.id}: ${request.service}, ${request.month}, ${request.amount}; ${stored.length} stored in test mode`
+      );
+    } finally {
+      await agent.call("setDataMode", ["live"]);
+    }
+    const live = await agent.call("getCreditRequests");
+    expect(
+      live.every((item) => item.dataset === "live"),
+      "a test-mode draft is listed with live data"
+    );
+  }
+);
+
+await check(
   "documentation search returns Cloudflare pages (G-2, G-7)",
   async () => {
     expect(agent, "no agent session");

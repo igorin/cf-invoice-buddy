@@ -16,7 +16,7 @@ Last updated 2026-10-07. The build follows nine phases set out in [spec/low-leve
 | 3 | Usage data, usage summary panel, test mode | Deployed |
 | 4 | Bill explanations and the assistant's cost report | Deployed |
 | 5 | Documentation search and grounding checks, with each reply held until it is checked | Deployed |
-| 6 | Credit request drafts | Not started |
+| 6 | Credit request drafts, history and owner-reported outcomes | Code complete; not yet deployed |
 | 7 | Monthly invoice close | Not started |
 | 8 | Plan comparison | Not started |
 | 9 | Release | Not started |

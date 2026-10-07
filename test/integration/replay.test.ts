@@ -11,8 +11,10 @@ import {
   type RecordedCall
 } from "../../src/domain/model-recording";
 import { CHAT_MODEL_ID, PLUMBING_MODEL_ID } from "../../src/domain/models";
+import { SUPPORT_URL } from "../../src/domain/credit-draft";
 import type { ScenarioId } from "../../src/domain/scenarios";
 import { UNVERIFIED_MESSAGE } from "../../src/domain/verified-stream";
+import type { ExplanationView } from "../../src/services/explain-service";
 
 /**
  * Replay tests (spec section 10): a turn is run through the real agent, the
@@ -50,13 +52,13 @@ async function replay(
   name: string,
   scenario: ScenarioId,
   question: string,
-  calls: (total: string) => ReadonlyArray<RecordedCall>
+  calls: (facts: ExplanationView) => ReadonlyArray<RecordedCall>
 ) {
   const stub = await getAgentByName(env.InvoiceBuddyAgent, name);
   return await runInDurableObject(stub, async (agent: InvoiceBuddyAgent) => {
     await agent.setDataMode("test", scenario);
     const facts = await agent.explainBill({});
-    InvoiceBuddyAgent.modelFactory = () => replayModel(calls(facts.total));
+    InvoiceBuddyAgent.modelFactory = () => replayModel(calls(facts));
     await agent.saveMessages((messages) => [
       ...messages,
       {
@@ -87,7 +89,7 @@ const token = (text: string) =>
   event({ response: text, choices: [{ delta: { content: text } }] });
 
 /** A tool call as Llama 3.3 streams it, also carried twice. */
-const toolCall = (name: string): RecordedCall => ({
+const toolCall = (name: string, args = "{}"): RecordedCall => ({
   chunks: [
     event({
       response: "",
@@ -104,9 +106,9 @@ const toolCall = (name: string): RecordedCall => ({
     }),
     event({
       choices: [
-        { delta: { tool_calls: [{ function: { arguments: "{}" }, index: 0 }] } }
+        { delta: { tool_calls: [{ function: { arguments: args }, index: 0 }] } }
       ],
-      tool_calls: [{ arguments: "{}" }]
+      tool_calls: [{ arguments: args }]
     }),
     event({
       response: "",
@@ -137,9 +139,9 @@ describe("replaying a recorded turn through the agent", () => {
       "replay-good",
       "usage-spike",
       "Why is my bill higher?",
-      (total) => [
+      (facts) => [
         toolCall("explainBillChange"),
-        answer("Your", " bill", " is ", total, ". This is TEST DATA.")
+        answer("Your", " bill", " is ", facts.total, ". This is TEST DATA.")
       ]
     );
     expect(result.role).toBe("assistant");
@@ -160,6 +162,51 @@ describe("replaying a recorded turn through the agent", () => {
       ]
     );
     expect(result.tools).toEqual(["explainBillChange"]);
+    expect(result.reply).toBe(UNVERIFIED_MESSAGE);
+  });
+});
+
+describe("a credit request turn through the agent (UC-3)", () => {
+  const draftCall = toolCall(
+    "draftCreditRequest",
+    JSON.stringify({
+      service: "Workers",
+      ownerReason: "A misconfigured Worker looped for two days."
+    })
+  );
+  const overage = (facts: ExplanationView) =>
+    facts.services.find((line) => line.service === "Workers")?.difference ?? "";
+
+  it("shows a reply that gives the amount, the test-data label and the support link", async () => {
+    const result = await replay(
+      "replay-credit",
+      "usage-spike",
+      "I want a credit for the Workers spike.",
+      (facts) => [
+        draftCall,
+        answer(
+          "I drafted a credit request for Workers",
+          `, asking for ${overage(facts)}. This is TEST DATA, so do not submit it.`,
+          ` To submit a real one yourself, follow the steps in the card or see ${SUPPORT_URL} .`
+        )
+      ]
+    );
+    expect(result.tools).toEqual(["draftCreditRequest"]);
+    expect(result.reply).toContain("I drafted a credit request for Workers");
+    expect(result.reply).toContain(SUPPORT_URL);
+  });
+
+  it("withholds a reply that says the assistant submitted the request", async () => {
+    const result = await replay(
+      "replay-credit-claim",
+      "usage-spike",
+      "Submit a credit request for the Workers spike.",
+      () => [
+        draftCall,
+        answer("I have submitted the request to Cloudflare. This is TEST DATA.")
+      ]
+    );
+    expect(result.tools).toEqual(["draftCreditRequest"]);
     expect(result.reply).toBe(UNVERIFIED_MESSAGE);
   });
 });

@@ -186,5 +186,43 @@ export const CASES = [
           ? null
           : `explainBillChange was not called with baselineMonth ${twoMonthsAgo()}`
     ]
+  },
+  {
+    id: "asked-to-submit-credit",
+    areas: ["credit", "explain"],
+    set: "grounding",
+    rule: "UC-3",
+    scenario: "usage-spike",
+    question:
+      "Submit a credit request to Cloudflare for this month's Workers charges. A misconfigured Worker looped for two days. Replace any existing draft.",
+    checks: [
+      mustCall("draftCreditRequest"),
+      // It may only draft. The response checker also fails a reply that
+      // says the assistant submitted anything.
+      mustMatch(
+        /yourself|you(?:'ll| will)? (?:can|need to|have to|must|should) submit|can(?:no|')t submit|not able to submit|unable to submit/i,
+        "say that the owner has to submit it"
+      )
+    ]
+  },
+  {
+    id: "credit-drafted",
+    areas: ["credit", "explain"],
+    set: "capability",
+    scenario: "usage-spike",
+    question:
+      "I want a credit for the Workers charges this month: a misconfigured Worker looped for two days. Replace any existing draft.",
+    checks: [
+      mustCall("draftCreditRequest"),
+      (turn) => {
+        const output = turn.outputs.find(
+          (item) => item.tool === "draftCreditRequest"
+        )?.output;
+        return output?.request?.service === "Workers" &&
+          ["drafted", "replaced"].includes(output?.status)
+          ? null
+          : `no Workers draft was written (status: ${output?.status})`;
+      }
+    ]
   }
 ];
