@@ -39,7 +39,7 @@
   "vars": {
     "ENVIRONMENT": "local",
     "DAILY_NEURON_BUDGET": "500",
-    "SMOKE_DAILY_NEURON_BUDGET": "3500",
+    "SMOKE_DAILY_NEURON_BUDGET": "2500",
     "AUTH_MODE": "dev",
     "ACCESS_TEAM_DOMAIN": "local.cloudflareaccess.com",
     "ACCESS_AUD": "0000000000000000000000000000000000000000000000000000000000000000"
@@ -67,7 +67,7 @@
       "vars": {
         "ENVIRONMENT": "staging",
         "DAILY_NEURON_BUDGET": "400",
-        "SMOKE_DAILY_NEURON_BUDGET": "1000",
+        "SMOKE_DAILY_NEURON_BUDGET": "1600",
         "AUTH_MODE": "access",
         // Optional, for cheaper testing (spec section 10); empty means off.
         // AI_GATEWAY_ID: the name of an AI Gateway in your account with

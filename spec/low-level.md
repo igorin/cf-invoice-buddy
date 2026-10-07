@@ -89,7 +89,7 @@ Variables, per environment:
 | --- | --- | --- | --- | --- |
 | `ENVIRONMENT` | `local` | `staging` | `production` | |
 | `DAILY_NEURON_BUDGET` | 500 | 400 | 3,000 | The owner instance's budget per 24 hours (section 12). |
-| `SMOKE_DAILY_NEURON_BUDGET` | 3,500 | 1,000 | 600 | The smoke-test instance's budget. The six add up to 9,000. |
+| `SMOKE_DAILY_NEURON_BUDGET` | 2,500 | 1,600 | 600 | The smoke-test instance's budget. The six add up to 8,600: 3,000 local, 2,000 staging, 3,600 production. |
 | `AUTH_MODE` | `dev` | `access` | `access` | Section 3. |
 | `AI_GATEWAY_ID`, `SMOKE_MODEL_ID` | not set | empty in the template | empty in the template | Optional, for cheaper testing (section 10). |
 
@@ -488,7 +488,7 @@ Implements UC-8 and NFR-O3 to O6. The logic is in `domain/self-cost.ts` and `dom
 
 | Guard | Behaviour |
 | --- | --- |
-| Budgets | Per instance and environment (section 1), 9,000 in all. A unit test fails if the total, in the template or the local file, passes 9,000. The remaining 1,000 allow for usage made outside the app, which no budget counts. |
+| Budgets | Per instance and environment (section 1), 8,600 in all. A unit test fails if the total, in the template or the local file, passes 9,000. The rest of the 10,000 allows for usage made outside the app, which no budget counts. The staging smoke budget covers several deploys a day: each costs up to about 160 neurons there, and a check refuses to start a turn that would not fit. |
 | Loop guard | `domain/loop-guard.ts`, a `stopWhen` condition: stops a turn after two consecutive steps with a failed tool call, or when the same call with the same input is made a third time. |
 | Step limit | Five model steps a turn. |
 | Stalled stream | A model stream silent for 45 seconds is aborted. |
