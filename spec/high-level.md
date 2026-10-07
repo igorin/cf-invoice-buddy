@@ -367,6 +367,7 @@ Not in v1. Each item names what it would need.
 
 | Item | Needs |
 | --- | --- |
+| Sync plan prices, included amounts and rates from Cloudflare, in place of the table in the code (post-release; [issue #21](https://github.com/igorin/cf-invoice-buddy/issues/21) holds the detailed spec) | A daily fetch of Cloudflare's four pricing pages in their Markdown form, extraction and validation in code, dated snapshots in the agent's database, and a fallback to the last good prices. There is no pricing API. To be built after phase 9 and the original scope are wrapped up. Until then plan comparison, the usage panel's allowances and the cost meter use prices read by hand, with their check date shown. |
 | Attribute a spike to a specific Worker script | The Workers dataset in the GraphQL Analytics API has a script name dimension, seen in the schema on this account. Not yet queried with data. It covers Workers requests and CPU, not other products. |
 | Submit credit requests and show Cloudflare's decision in chat (UC-5) | A submission channel and a way to receive decisions. Cloudflare has no public API for either. |
 | Multiple accounts or users | A login and account-mapping design in place of the single Access-protected deployment. |
