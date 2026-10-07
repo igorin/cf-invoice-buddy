@@ -41,3 +41,5 @@ Every deployment that passed its smoke test, oldest first. Failed and drill depl
 | 4 | 2026-10-06T00:08:33.362Z | production | 888672dee8e9 | passed |
 | 5 | 2026-10-07T00:28:54.043Z | staging | d9d74982ff41 | passed |
 | 5 | 2026-10-07T00:30:09.984Z | production | d9d74982ff41 | passed |
+| 5 | 2026-10-07T00:51:34.398Z | staging | f8a5484a1450 | passed |
+| 5 | 2026-10-07T00:52:26.590Z | production | f8a5484a1450 | passed |

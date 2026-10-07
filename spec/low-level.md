@@ -727,7 +727,7 @@ Phase 5 built documentation search, the response checker and the evaluation suit
 - The smoke test names this cause when it meets it and says the deploy is not at fault.
 - The evaluation suite is the largest single use of the allowance, about 2,500 neurons for a clean run. It should not be run on a day when a deploy is planned until the enforced window is understood.
 
-**Phase 5 deployment status.** Deployed on 2026-10-07 at commit `d9d7498`: staging at 00:28 UTC and production at 00:30 UTC, both passing 9 of 9 smoke checks. The `deployed/phase-5` tag is on that commit. The deploy also carries held replies, the shorter prompt and the cheaper-testing changes.
+**Phase 5 deployment status.** Deployed on 2026-10-07 at commit `d9d7498`: staging at 00:28 UTC and production at 00:30 UTC, both passing 9 of 9 smoke checks. Redeployed the same day at `f8a5484` (cache hits left out of the meter), where the `deployed/phase-5` tag now is. The deploy also carries held replies, the shorter prompt and the cheaper-testing changes.
 
 ### Held replies and cheaper evaluations (2026-10-05)
 
@@ -782,6 +782,8 @@ Decided by the owner: a model call the gateway served from its cache is not coun
 | Record | Migration 5 adds `self_cached_calls`. A turn served wholly from the cache is a metered row with zero neurons, not an unmetered turn. | The cost report has `modelCallsServedFromCache`; `state.selfCost` has `cachedCalls`. |
 | Smoke test | Its metering check passes when the turn raised the meter or was counted as served from the cache. | A turn that did neither still fails the check. |
 | Scope | Only the smoke-test instance in a deployed environment calls the model through the gateway, so only its meter changes. | |
+
+**Live result (2026-10-07).** Deployed at commit `f8a5484`: staging at 00:51 UTC and production at 00:52 UTC, both passing 9 of 9 smoke checks. In each run the smoke turn's two model calls were reported as cache hits, the instance's meter did not move (601.12 neurons on staging, 111.86 on production, before and after), and two cached calls were counted. The account's analytics agree: 112 neurons for the hour, the same as before the two runs. This shows the header reaches the app through `returnRawResponse` for a Workers AI model. A call that misses the cache has not yet been seen through this path on Cloudflare; the tests cover it with a scripted response.
 
 **Direction of error.** Before, the meter could only overstate usage. It can now understate it if the gateway reported a hit for a call that was billed. Nothing observed suggests it does.
 
