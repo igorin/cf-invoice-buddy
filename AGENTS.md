@@ -11,6 +11,13 @@ This project keeps what it has observed about Cloudflare's platform in [.claude/
 - **If Cloudflare's current documentation explicitly contradicts an entry, update the file.** Change the entry to say what the documentation now states, with the page and the date you read it, and mark it Documented until it has been seen on the platform. Do not delete an Observed entry because the documentation disagrees: keep what was observed, with its date, next to what the documentation says, so the difference is visible.
 - **Add to it** when you learn something about the platform that cost time to find out. Mark it Observed only if you saw it happen.
 
+## Specs
+
+The specs in [spec/](spec/) describe what the system does. Two rules, also in [spec/README.md](spec/README.md):
+
+- **Update the body of the spec in the same change as the code.** Do not append notes about how the build differs from the spec.
+- **Before a significant addition or change to the scope, archive the current spec**: copy `high-level.md` and `low-level.md` into `spec/archived/<date>-<name>/` and add a row to `spec/archived/README.md`.
+
 ## Docs
 
 - https://developers.cloudflare.com/workers/

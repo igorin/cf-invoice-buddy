@@ -136,6 +136,27 @@ Wrangler is Cloudflare's command-line tool. It is installed with the project's o
 
 When a change to the configuration is meant for everyone, make it in `wrangler.example.jsonc` as well, since that is the file in git and the one CI uses.
 
+## Workflows
+
+The monthly invoice close runs as a [Cloudflare Workflow](https://developers.cloudflare.com/workflows/), a durable, multi-step program that can wait for days and survive restarts.
+
+**You do not create it.** Each environment's Workflow is declared in the `workflows` entry of the Wrangler configuration, and `wrangler deploy` creates it on the first deploy, the same way it creates the agent's Durable Object. Staging and production each get their own (`invoice-close-staging` and `invoice-close`), so they never share a close. Workflows are available on the Workers Free plan.
+
+How a close works:
+
+1. You ask in chat to close a month. Only a month that has ended can be closed; with no month named, it is the last finished one.
+2. The Workflow freezes that month's usage, so later data cannot change the close.
+3. It totals the frozen usage per product and reconciles the total with the invoice.
+4. It runs the same anomaly detectors a bill explanation uses.
+5. It waits for you, for up to seven days. An approval card appears above the chat with the line items, the reconciliation and anything the detectors found.
+6. **Approve** closes the month for good: its figures are final and it cannot be closed again. **Reject**, or no decision in seven days, leaves the month open, and the close can be started again.
+
+Only the buttons in the approval card can approve or reject. The assistant can start a close and tell you its state, but it has no way to approve one, and a reply in which it claims to have done so is withheld.
+
+Each step does its work in the agent's own database and is safe to run twice, so a retried step never writes a second snapshot or closes a month twice. The close's result is kept by the agent, because on the Free plan Cloudflare keeps a finished Workflow instance for only three days.
+
+In test mode a close runs on fixture data, is labelled as such, and closes no real period. Your Workflows and their runs are listed in the Cloudflare dashboard, in the Workflows section.
+
 ## Developing
 
 ```sh

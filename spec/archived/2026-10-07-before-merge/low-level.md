@@ -2,20 +2,25 @@
 
 | | |
 | --- | --- |
-| Status | Describes the system as built through phase 7. Phases 8 and 9 are planned and marked as such. |
-| Last updated | 2026-10-07 |
-| Implements | [high-level.md](high-level.md) |
-| Original | [archived/2026-10-04-original/low-level.md](archived/2026-10-04-original/low-level.md), written before any code |
+| Status | Draft for review |
+| Last updated | 2026-10-04 |
+| Implements | [high-level.md](high-level.md), using the defaults in its open questions |
 
-This document says how the product in the high-level spec is built. It follows Cloudflare's [chat agent guide](https://developers.cloudflare.com/agents/examples/chat-agent/) and the `cloudflare/agents-starter` template.
-
-On 2026-10-07 sections 1 to 13 and 15 were rewritten to describe what was built. Every difference from the original design is listed in [archived/README.md](archived/README.md), and section 14 keeps the dated record of how each one came about. Where a section and section 14 disagree, the section is current.
+This document says how to build what the high-level spec requires. It follows Cloudflare's [chat agent guide](https://developers.cloudflare.com/agents/examples/chat-agent/) and the `cloudflare/agents-starter` template. Section 14 lists what was checked against the Cloudflare docs and what could not be.
 
 ## 1. Project setup
 
-The starter's files were copied into the repository, keeping the existing `LICENSE`, `README.md`, `AGENTS.md` and `.gitignore`. The starter's own CI workflows were not copied.
+The starter's files are copied into the repository, keeping the existing `LICENSE`, `README.md`, `AGENTS.md` and `.gitignore`. The starter's own CI workflows are not copied.
 
-The starter pins older versions than the current releases. The project runs on the stack below, decided 2026-10-05:
+```sh
+npx create-cloudflare@latest --template cloudflare/agents-starter
+npm install
+npm install -D vitest@^4.1.0 @cloudflare/vitest-plugin @vitest/coverage-istanbul @playwright/test
+```
+
+The repository first held a Cloudflare Workflows "hello world" scaffold. It was replaced by the starter on 2026-10-05, since the chat UI, build and agent class all come from the starter.
+
+The starter pins older versions than the current releases. The project runs on the upgraded stack below, decided 2026-10-05:
 
 | Package | Starter | Project |
 | --- | --- | --- |
@@ -23,14 +28,12 @@ The starter pins older versions than the current releases. The project runs on t
 | `workers-ai-provider` | 3.2 | 4.0.0 |
 | `agents` | 0.17 | 0.26.0 |
 | `@cloudflare/ai-chat` | 0.9 | 0.12.1 |
-| `@ai-sdk/react` | 3.0 | 4.0 (required by the build) |
+| `@ai-sdk/react` | 3.0 | 4.0 (now required by the build) |
 | `wrangler` | 4.113 | 4.147.0 |
 | `@cloudflare/vite-plugin` | 1.46 | 1.62.5 |
 | `vite` | 8.1 | 8.3.2 |
 | `vitest` | not included | 4.1.11, the major the Cloudflare Vitest plugin requires |
 | `typescript` | 6.0 | 6.0.3, unchanged |
-
-Also added: `jose` for Access tokens, `zod`, `@cloudflare/vitest-plugin` and `@vitest/coverage-istanbul`. `package.json` carries npm `overrides` for `@modelcontextprotocol/sdk`, `@modelcontextprotocol/client` and `sharp`, which pin patched versions until `agents` and `miniflare` release with them. Playwright is not installed; browser tests are planned for phase 9.
 
 `chatRecovery = true` from the starter no longer type-checks on `@cloudflare/ai-chat` 0.12 and is omitted; the SDK default applies.
 
@@ -42,18 +45,16 @@ Also added: `jose` for Access tokens, `zod`, `@cloudflare/vitest-plugin` and `@v
 | Model `@cf/moonshotai/kimi-k2.7-code` | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | Product decision. |
 | Demo tools (weather, timezone, calculate, scheduling) | Removed | Replaced by the tools in section 5. |
 | `addServer` / `removeServer` callables | Removed | The owner must not be able to attach arbitrary MCP servers to an agent that holds billing data. |
-| `stopWhen: stepCountIs(20)` | Five steps, plus a loop guard | 24,000-token context, and the free allowance (section 12). |
-| Text streamed as it is written | Text held until checked | Section 7. |
-| No tests | Vitest and an evaluation suite | NFR-T1 to NFR-T6. The starter's `package.json` ships no test runner, although the Cloudflare testing page says it does. |
+| `stopWhen: stepCountIs(20)` | `stepCountIs(8)` | 24,000-token context. |
+| No tests | Vitest, Playwright, evals | NFR-T1 to NFR-T6. The starter's `package.json` ships no test runner, although the Cloudflare testing page says it does. |
 
-### Wrangler configuration
+### `wrangler.jsonc`
 
-`wrangler.jsonc` is not in git. The repository holds `wrangler.example.jsonc`; each developer copies it to `wrangler.jsonc`, which `.gitignore` excludes, and CI makes the same copy before it runs. The deploy script needs the local file and prints a note when it differs from the template, because a deploy takes its configuration from outside the commit it deploys.
-
-The template, in outline:
+The file is not in git (since 2026-10-06). The repository holds `wrangler.example.jsonc`, with the content below; each developer copies it to `wrangler.jsonc`, which `.gitignore` excludes. CI makes the same copy before it runs. The deploy script needs the local file and says so when it differs from the template, because a deploy now takes its configuration from outside the commit it deploys.
 
 ```jsonc
 {
+  "$schema": "node_modules/wrangler/config-schema.json",
   "name": "cf-invoice-buddy",
   "main": "src/server.ts",
   "compatibility_date": "2026-07-21", // must not be newer than the installed Workers runtime supports
@@ -68,253 +69,227 @@ The template, in outline:
     "bindings": [{ "name": "InvoiceBuddyAgent", "class_name": "InvoiceBuddyAgent" }]
   },
   "workflows": [
-    { "name": "invoice-close-local", "binding": "INVOICE_CLOSE_WORKFLOW", "class_name": "InvoiceCloseWorkflow" }
+    { "name": "invoice-close", "binding": "INVOICE_CLOSE_WORKFLOW", "class_name": "InvoiceCloseWorkflow" }
   ],
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["InvoiceBuddyAgent"] }],
   "observability": { "enabled": true },
   "preview_urls": false,
-  "vars": { /* local values, below */ },
+  "vars": { "USAGE_SOURCE": "graphql-analytics,billable-usage-v1,billing-history", "DAILY_NEURON_BUDGET": "10000" },
   "env": {
-    "staging": { "name": "cf-invoice-buddy-staging" /* own bindings, vars, workflow invoice-close-staging */ },
-    "production": { "name": "cf-invoice-buddy" /* own bindings, vars, workflow invoice-close */ }
+    "staging": { "name": "cf-invoice-buddy-staging" /* own bindings and workflow name */ },
+    "production": { "name": "cf-invoice-buddy" /* same sources; own bindings */ }
   }
 }
 ```
 
-The top level is local development. `staging` and `production` are Cloudflare environments, selected at build time with `CLOUDFLARE_ENV` because the project builds with the Cloudflare Vite plugin. Bindings and `vars` are not inherited, so each environment repeats `ai`, `durable_objects`, `workflows` and `vars`. Each environment has its own Workflow, and its own Durable Object namespace and therefore its own data and meter. The Workflows and the Durable Object are created by `wrangler deploy` from these entries; nothing is set up by hand.
+The top level is local development. `staging` and `production` are Cloudflare environments, selected at build time with `CLOUDFLARE_ENV` because the project builds with the Cloudflare Vite plugin. Bindings and `vars` are not inherited by environments, so each environment repeats `ai`, `durable_objects`, `workflows` and `vars`. The staging workflow is named `invoice-close-staging` so the two environments do not share instances. Each environment has its own Durable Object namespace and therefore its own data and its own meter.
 
-Variables, per environment:
-
-| Variable | Local | Staging | Production | Purpose |
-| --- | --- | --- | --- | --- |
-| `ENVIRONMENT` | `local` | `staging` | `production` | |
-| `DAILY_NEURON_BUDGET` | 500 | 400 | 3,000 | The owner instance's budget per 24 hours (section 12). |
-| `SMOKE_DAILY_NEURON_BUDGET` | 3,500 | 1,000 | 600 | The smoke-test instance's budget. The six add up to 9,000. |
-| `AUTH_MODE` | `dev` | `access` | `access` | Section 3. |
-| `AI_GATEWAY_ID`, `SMOKE_MODEL_ID` | not set | empty in the template | empty in the template | Optional, for cheaper testing (section 10). |
-
-Secrets: `CF_ACCOUNT_ID`, `CF_API_TOKEN` (Billing: Read and Account Analytics: Read), `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`. The account ID and the Access values are treated as secrets because the repository is public. Locally they are in `.dev.vars`. For a deployed environment they are in `.secrets/<environment>.env`, uploaded by `wrangler deploy --secrets-file`, so one command sets code and secrets together. Both are git-ignored. Env types come from `npm run types` (`wrangler types`); they are not written by hand.
+Secrets, set per environment with `wrangler secret put`: `CF_ACCOUNT_ID`, `CF_API_TOKEN` (billing read only), `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`. Local values go in `.dev.vars`, which is git-ignored. Env types come from `npm run types` (`wrangler types`); they are not written by hand.
 
 Rules from the Cloudflare docs that apply here:
 
 - Do not enable `experimentalDecorators`; it breaks `@callable`.
 - Never edit a deployed migration; add a new tag.
-- Workflow callbacks find the agent through its class name, so the build must preserve class names. The Vite build does.
+- Workflow callbacks find the agent through its class name, so the build must preserve class names. Integration test `workflow-callback.test.ts` proves it against the built output.
 - Workflows reach the agent by name, so the agent is always addressed by name, never by raw Durable Object ID.
 
 ## 2. Source layout
 
 ```
-spec/                     high-level.md, low-level.md, deployments.md, archived/
+spec/                     high-level.md, low-level.md
 src/
-  server.ts               Worker entry: configuration, auth, instance lock, routing; exports agent and workflow
-  config.ts               one schema for every variable and secret
-  auth.ts                 Access JWT verification
-  model.ts                which model an instance calls, and how (direct, gateway, recording)
+  server.ts               Worker entry: auth, routing; exports agent and workflow
+  agent.ts                InvoiceBuddyAgent
   prompt.ts               system prompt
-  agent.ts                InvoiceBuddyAgent: chat turn, cost meter, usage data, bill explanation
-  agent-records.ts        RecordsAgent, its base class: credit requests, invoice closes, audit log
-  agent-state.ts          the synced state and its types
-  tools/                  index.ts and one file per tool group (section 5)
+  tools/                  one file per tool (section 5)
   workflows/              invoice-close.ts
-  services/               one file per feature: reads and writes the database, calls the domain
   domain/                 pure code, no Cloudflare imports
-    money.ts periods.ts usage.ts
-    breakdown.ts explain.ts unexplained.ts reconcile.ts
-    findings.ts detectors.ts          all detectors in one file (section 6)
-    usage-summary.ts allowances.ts
-    credit-draft.ts close.ts
-    grounding.ts verified-stream.ts   response checker and held replies (section 7)
-    self-cost.ts models.ts            meter, budget, model rates (section 12)
-    loop-guard.ts dedupe-stream.ts cache-status.ts model-recording.ts
-    scenarios.ts scenario-builder.ts  test-mode data (section 4)
-  ports/sources.ts        UsageSource, BillingSource, DocsSearch
-  adapters/               graphql-usage.ts, billing.ts, docs-search.ts
-  db/                     schema.ts (migrations) and one store per table group
-  app.tsx, components/    chat UI (starter, plus the panels and cards in section 9)
+    money.ts              Micros type and arithmetic
+    periods.ts            billing period maths
+    breakdown.ts          by product, by day, deltas
+    detectors/            one file per detector (section 6)
+    reconcile.ts          snapshot vs. invoice
+    grounding.ts          response checker (section 7)
+    credit-draft.ts       draft template and submission instructions
+    self-cost.ts          token-to-neuron-to-dollar conversion, price constants, budget check
+    usage-summary.ts      per-product summary from usage rows and the allowance table
+    allowances.ts         included amounts per plan and metric, with source and date checked
+  ports/                  usage-source.ts, docs-search.ts (interfaces)
+  adapters/               fixture and API implementations of the ports (usage sources: section 4)
+  db/                     schema.ts (migrations), queries.ts, row schemas
+  auth.ts                 Access JWT verification
+  app.tsx, components/    chat UI (starter, plus the cards in section 9)
 test/
-  unit/  integration/  fixtures/  cassettes/
-evals/                    cases.mjs, select.ts, RESULTS.md
-scripts/                  deploy.mjs, smoke.mjs, eval.mjs, record.mjs, check-phase-gate.mjs, agent-client.mjs, lib.mjs
-.github/workflows/ci.yml
-.claude/skills/cloudflare-platform-notes/   what the project has observed about Cloudflare's platform
+  unit/  integration/  e2e/  fixtures/
+evals/                    grounding and capability cases (section 10)
+scripts/smoke.ts          post-deploy smoke test (section 13)
+.github/workflows/        ci.yml, deploy.yml
+spec/deployments.md       deployment record (section 13)
 ```
 
-`domain/` imports nothing from Cloudflare or the AI SDK. That keeps it testable without the Workers runtime and is what the 95% coverage bar (NFR-T3) applies to. `services/` is the layer between the agent and the database: the agent's methods are thin, and no file is over 400 lines.
+`domain/` imports nothing from Cloudflare or the AI SDK. That keeps it testable without the Workers runtime and is what the 95% coverage bar (NFR-T3) applies to.
 
 ## 3. Worker entry and authentication
 
-`server.ts` reads the configuration, authenticates, then routes:
+`server.ts` handles four kinds of request:
 
 | Route | Behaviour |
 | --- | --- |
-| `GET /api/session` | Returns `{ accountId }` so the client knows which agent instance to open. |
-| `GET /api/version` | Returns the commit SHA baked in at build time and the environment name. |
-| `/agents/*` | Refuses, with 403, any instance name other than the account ID and the account ID followed by `-smoke`, then calls `routeAgentRequest`. The check is in the `fetch` handler, before routing. |
+| `GET /api/session` | Verifies the Access JWT. Returns `{ accountId }` so the client knows which agent instance to open. |
+| `GET /api/version` | Behind Access like everything else. Returns the commit SHA baked in at build time, the environment name, and whether every required secret and variable is present (names only, never values). |
+| `/agents/*` | `routeAgentRequest(request, env, { onBeforeConnect, onBeforeRequest })`. Both hooks verify the Access JWT and reject with 403 any instance name other than `env.CF_ACCOUNT_ID`. |
 | anything else | Static assets. |
 
-Every route is behind authentication. `auth.ts` verifies the `Cf-Access-Jwt-Assertion` header with `jose` against the team's public keys and the `ACCESS_AUD` audience. `AUTH_MODE=dev` bypasses this for local development and is refused when the request hostname is not `localhost`.
+`auth.ts` verifies the `Cf-Access-Jwt-Assertion` header against the team's public keys and the `ACCESS_AUD` audience. An `AUTH_MODE=dev` bypass exists for local development and is refused when the request hostname is not `localhost`.
 
-Access is a hostname-based self-hosted application on each environment's `workers.dev` hostname, not a Worker-level policy: Worker-level policies return 403 on a WebSocket upgrade, and the chat runs over WebSocket. Scripts authenticate with an Access service token.
-
-Variables and secrets are parsed with one Zod schema (`config.ts`) on every request path that uses them. A missing or malformed value fails every request with a 500 that lists the invalid variable names, never their values, so a misconfigured deployment cannot pass the smoke test.
-
-The second instance, `<account id>-smoke`, exists for the smoke test, the evaluation runner and the recording script. It has its own conversation, data mode, meter and budget, so tests do not write into the owner's conversation.
+Environment variables and secrets are parsed with one Zod schema when the Worker first handles a request. A missing or malformed value fails every request with a 500 and a log line naming the variable, so a misconfigured deployment cannot pass the smoke test.
 
 ## 4. Data model
 
-All tables live in the agent's SQLite and are created by numbered migrations in `db/schema.ts`, applied in `onStart` and recorded in `schema_migrations`. Migrations only add: every statement is `CREATE TABLE IF NOT EXISTS` or `CREATE INDEX IF NOT EXISTS`, so a migration can run twice and a rolled-back Worker can read a newer schema (NFR-D6). Chat messages and workflow tracking are stored by the SDK in its own tables.
+All tables live in the agent's SQLite and are created by numbered migrations in `db/schema.ts`, applied in `onStart` and recorded in `schema_migrations`. Chat messages and workflow tracking are stored by the SDK in its own tables; this project does not touch them directly.
 
-Money in usage and invoices is integer micro-dollars (`*_micros`, 1 USD = 1,000,000). Timestamps are ISO 8601 UTC text. Queries use parameters throughout.
+Money is stored as integer micro-dollars (`*_micros`, 1 USD = 1,000,000). Timestamps are ISO 8601 UTC text. Every query uses the `this.sql` tagged template, which parameterizes values. Rows are parsed with a Zod schema on the way out.
 
-| Migration | Table | Columns | Notes |
-| --- | --- | --- | --- |
-| 1 | `self_usage` | `id`, `at`, `model`, `steps`, `input_tokens`, `output_tokens`, `neurons`, `cost_micros`, `metered` | One row per chat turn. `metered` is 0 when the provider returned no token counts; the token, neuron and cost columns are then null. Insert only. |
-| 1 | `self_activity_daily` | `day`, `chat_turns`, `refused_turns` | |
-| 2 | `audit_log` | `id`, `at`, `actor`, `action`, `subject_id`, `dataset`, `detail_json` | Insert only. `actor` is `owner` for what the owner did or said (mode switch, credit outcome, close decision) and `agent` otherwise. |
-| 3 | `usage_records` | `dataset`, `date`, `service`, `metric`, `zone`, `quantity`, `unit`, `billable_quantity`, `cost_micros` | One row per product, metric, zone and day, including usage inside free allowances. `cost_micros` is null when the source gives no cost; null is never read as zero. |
-| 3 | `usage_source_status` | `dataset`, `service`, `available`, `reason`, `checked_at` | Per product, so one unreadable product is shown as unavailable without hiding the rest (UC-9). |
-| 3 | `account_billing` | `dataset`, `status`, `reason`, `plan`, `synced_at` | Whether the account has charges: none, costed or unavailable. Drives rule G-6 and the "no charges" wording. |
-| 4 | `usage_periods` | `dataset`, `period_start`, `synced_at` | Which periods have been fetched, so a baseline uses only complete months. |
-| 4 | `invoices` | `dataset`, `period_start`, `period_end`, `amount_micros` | |
-| 5 | `self_cached_calls` | `id`, `at`, `model`, `calls` | Model calls the AI Gateway cache served, which used no neurons (section 12). |
-| 6 | `credit_requests` | `id`, `dataset`, `period_start`, `service`, `amount`, `basis`, `owner_reason`, `draft`, `evidence_json`, `state`, `reported_amount`, `reported_note`, `created_at`, `updated_at` | One current draft per dataset, period and product; replacing it sets the old row to `superseded` and keeps it. `amount` and `reported_amount` are the text shown, since nothing computes with them. |
-| 7 | `invoice_closes` | `dataset`, `period_start`, `period_end`, `workflow_id`, `state`, `snapshot_json`, `summary_json`, `approved_at`, `decided_reason`, `started_at`, `updated_at`, `closed_at` | One row per dataset and period. The snapshot is the period's usage records, frozen as JSON on the row. A row in state `closed` is never updated again. |
+| Table | Columns | Notes |
+| --- | --- | --- |
+| `usage_charges` | `charge_start`, `charge_end`, `billing_period_start`, `service`, `service_family`, `zone_id`, `zone_name`, `consumed_qty`, `consumed_unit`, `pricing_qty`, `pricing_unit`, `cost_micros`, `currency`, `description`, `synced_at` | One row per usage record, including usage inside free allowances. Primary key (`charge_start`, `service`, `metric`, `zone_id`). Upserted on sync. A `metric` column names the billable metric and a `source` column names the adapter that supplied the row. `cost_micros` is null when the source gives no cost; null is never read as zero. |
+| `usage_source_status` | `service`, `source`, `last_success_at`, `last_error` | Per product, so one unreadable product is shown as unavailable without hiding the rest (UC-9). |
+| `invoices` | `invoice_id`, `period_start`, `period_end`, `amount_micros`, `currency`, `status`, `issued_at` | From billing history. |
+| `sync_state` | `source`, `last_success_at`, `last_error`, `covered_from`, `covered_to` | Drives rule G-6. |
+| `credit_requests` | `id`, `period_start`, `service`, `amount_micros`, `owner_reason`, `draft`, `evidence_json`, `state`, `reported_amount_micros`, `reported_note`, `created_at`, `updated_at` | One current draft per (`period_start`, `service`); replacing it sets the old row to `superseded`. `state` after `drafted` is owner-reported. |
+| `invoice_closes` | `period_start`, `workflow_id`, `state`, `snapshot_total_micros`, `invoice_total_micros`, `variance_micros`, `findings_json`, `closed_at` | Primary key `period_start`. |
+| `usage_snapshots` | `period_start`, then the `usage_charges` columns | Frozen copy written by the close. Never updated. |
+| `audit_log` | `id`, `at`, `actor`, `action`, `subject_id`, `detail_json` | Insert only. `actor` is `owner`, `agent` or `workflow`. |
+| `self_usage` | `id`, `at`, `request_id`, `model`, `steps`, `input_tokens`, `output_tokens`, `neurons`, `cost_micros`, `metered` | One row per chat turn. `metered` is 0 when the provider returned no token counts; the token, neuron and cost columns are then null. Insert only. |
+| `self_activity_daily` | `day`, `chat_turns`, `incoming_messages`, `scheduled_runs`, `workflow_steps`, `refused_turns` | Counters behind the estimated, non-model part of the cost report. |
 
 Credit request states: `drafted`, then optionally `reported_submitted`, `reported_approved`, `reported_partially_approved` or `reported_denied` when the owner says so, or `superseded` when replaced.
 
-Invoice close states: `snapshotted` (in progress), `awaiting_approval`, then `closed`, or `rejected`, `expired` or `failed`, which leave the period open and allow the close to be started again on the same row. The audit log keeps the history of earlier attempts.
+Invoice close states: `snapshotting → rating → checking → awaiting_approval → closed`, with `rejected`, `expired` and `failed` as terminal alternatives that leave the period open.
 
 ### Live and test data
 
-Implements UC-10 and G-9. Every table of account data carries a `dataset` column, `live` or `test`, which is part of its key. Every store function takes the dataset as a required argument; there is no default. `audit_log` records the dataset of each entry. The meter tables have no dataset: the meter is always real.
+Implements UC-10 and G-9. `usage_charges`, `invoices`, `credit_requests`, `invoice_closes`, `usage_snapshots` and `usage_source_status` each carry a `dataset` column, `live` or `test`, which is part of every primary and unique key. Every query in `db/queries.ts` takes the dataset as a required argument; there is no default. `audit_log` records the dataset of each entry. `self_usage` has no dataset: the meter is always real.
 
 The current mode is `state.dataMode`: `{ dataset: "live" }` or `{ dataset: "test", scenario }`. It is persisted with the agent state and is the single place tools read the dataset from. A tool never accepts the dataset as model input.
 
-There are five scenarios, defined in code in `domain/scenarios.ts` and built by `domain/scenario-builder.ts`: a usage spike, a lower bill with no visible cause, a new product, a zone whose name is an instruction to the assistant, and a bill of zero. Each is generated relative to today, so the scenario's current period is always the real current month and its earlier months are complete baselines with matching invoices. Entering test mode replaces the `test` rows with the scenario's data. The scheduled sync writes only `live` rows.
+Scenarios are the fixture accounts in `test/fixtures/scenarios/`, also bundled with the Worker. They are the same files the tests and evals use. Entering test mode with a scenario replaces the `test` rows with that scenario's data, with dates shifted so the scenario's last period is the current one. `syncUsage` writes only `live` rows.
 
 ### Usage sources
 
-Three ports, each with one adapter:
+The `UsageSource` port returns usage records with an optional cost. `USAGE_SOURCE` is a comma-separated list of live sources; they are merged per product, and the first that supplies a field wins. Fixture data is not a live source: it is reached only through test mode.
 
-| Port | Adapter | Supplies |
+| Adapter | Supplies | Status |
 | --- | --- | --- |
-| `UsageSource` | `GraphqlUsageSource` | Daily quantities per product from the GraphQL Analytics API, including usage inside free allowances: Workers AI neurons, Workers requests, Durable Objects requests, duration and rows read and written, and Workflows steps. One request per dataset. No cost. A product with any failed dataset contributes no rows and is reported as unavailable. |
-| `BillingSource` | `CloudflareBillingSource` | Whether the account is covered by a usage-based subscription, its plan, and issued invoices, from `billable-usage/info` and `billing/history`. |
-| `DocsSearch` | `CloudflareDocsSearch` | Section 5. |
+| `fixture` | Quantities, costs and invoices from scenario files | Feeds the `test` dataset only (UC-10). Never merged with live sources. |
+| `graphql-analytics` | Daily quantities per product from the Workers AI, Workers, Durable Objects and Workflows datasets, including usage inside free allowances. No cost. | Primary source for quantities. Proven on this account with real data (B7). |
+| `billable-usage-v1` | Cost and priced quantity for pay-as-you-go charges, plus `info`, which says whether the account is covered. | Source for cost. Reachable with `Billing Read` (B1); empty here because the account has no usage-based subscription. |
+| `billing-history` | Issued invoices. | Reachable; empty here. |
+| `billable-usage-v2` | Daily quantity per billable metric, including free-allowance usage. | Not used in v1. Restricted; 403 even with `Billing Read`. |
+| `self-meter` | Workers AI neurons and cost for the assistant's own calls, from `self_usage`. | Always available. Labelled as the assistant's share, not the account total. |
 
-No subscription and no invoices gives "no charges": the panel then says the account has no usage-based subscription and no invoices, and shows quantities only. Anything else gives "unavailable" for amounts, because per-record charges are not read. Their shape could not be observed on the account the project was built on, which has a $0 bill (section 14, V1 and V10). A paid account would see quantities with amounts marked unavailable until that is built. The newer usage endpoint is restricted and not used.
+The billed amount is stated only from billing sources. When `info` reports the account as not covered, there are no subscriptions and no invoices, the panel says "No charges: this account has no usage-based subscription and no invoices" and shows quantities only. If the billing sources cannot be read at all, amounts show as unavailable.
 
-Test-mode data does not come through these ports; it is written straight into the `test` dataset.
-
-**Sync.** `syncUsage` runs on first use and every six hours by cron, for the current period only. An earlier month is fetched on demand, when the owner names it as a baseline or closes it, and is then kept. The billing period is the calendar month for an account with no billing cycle.
+GraphQL queries filter by account and date range and group by `date` plus the product's own dimension (model for Workers AI, script for Workers). Each dataset is one query per sync. The mapping from dataset fields to the summary's metrics and allowances lives in one file, so adding a product is one entry.
 
 ### Agent state
 
-`this.state` is synced to the browser, so it holds only what the UI shows:
+`this.state` is synced to the browser, so it stays small and holds nothing the UI does not show:
 
 ```ts
 type AgentState = {
-  selfCost: {
-    monthCostMicros: number;
-    windowNeurons: number; // trailing 24 hours
-    dailyBudgetNeurons: number;
-    unmeteredTurns: number;
-    cachedCalls: number;
-  };
-  dataMode: { dataset: "live" } | { dataset: "test"; scenario: ScenarioId };
+  pendingApprovals: ReadonlyArray<{
+    workflowId: string;
+    kind: "invoice_close";
+    title: string;
+    expiresAt: string;
+  }>;
+  creditRequests: ReadonlyArray<{ id: string; service: string; amountMicros: number; state: CreditRequestState }>;
   lastSyncAt: string | null;
-  pendingApprovals: ReadonlyArray<CloseView>; // closes waiting for the owner, in the current mode
+  dataMode: { dataset: "live" } | { dataset: "test"; scenario: string };
+  selfCost: { monthCostMicros: number; todayNeurons: number; dailyBudgetNeurons: number; unmeteredTurns: number };
 };
 ```
 
 ## 5. Tools
 
-Tools are defined with the AI SDK `tool()` helper and Zod input schemas. All run on the server. None has an effect outside the agent's own database.
+Tools are defined with the AI SDK `tool()` helper and Zod input schemas. All run on the server. None has an effect outside the agent's own database. `startInvoiceClose` starts a workflow that stops at an approval gate.
 
-Input schemas are deliberately loose where the model fills fields with words from the question: a month that is not `YYYY-MM` is dropped and reported in a note, so the call still runs. A strict schema made the model retry a rejected call until the turn ran out of steps.
-
-Results carry every amount as formatted text, so the model copies it and never formats or computes. Each result also carries a `notice` naming its dataset and an `instruction` for the model: what to say, and what not to.
+Every result is capped at about 1,500 tokens: top eight products, and daily series only for the three largest movers. Amounts are returned both as micros and as a formatted string, so the model copies the string and never formats or computes.
 
 | Tool | Input | Returns |
 | --- | --- | --- |
-| `getUsageSummary` | none | One row per product and metric for the current period: quantity, unit, included allowance and share used when the allowance table has an entry, billed amount or `unavailable`, and per-product availability. Works with no invoice and a $0 bill. |
-| `explainBillChange` | `month?`, `baselineMonth?` | Total and baseline, difference per product, findings with evidence (section 6), the unexplained remainder, notes on data gaps, and the assistant's own metered usage in the period. An `outcome` of `explained`, `none_found`, `no_baseline` or `no_charges` selects the instruction. The daily series is drawn by the card. |
-| `searchCloudflareDocs` | `query` | Up to three pages: `title`, `url`, a 400-character `excerpt`. Only pages on `developers.cloudflare.com`. |
-| `getAssistantCost` | none | Metered model cost, neurons, tokens and turns for the month and by day; unmetered turns; turns refused over budget; model calls served from cache; the trailing-24-hour figure against the budget; the limits from UC-8; the price source and date. |
-| `setDataMode` | `dataset`, `scenario?` | Declared with `needsApproval: true`, so the SDK pauses and the owner confirms in the UI before it runs. Lists the scenarios when `scenario` is missing. |
-| `draftCreditRequest` | `service`, `ownerReason`, `month?`, `replaceExisting?` | The draft, its basis and amount, and the fixed submission steps with their link. Returns the existing draft unchanged when one exists and `replaceExisting` is not set. |
-| `getCreditRequests` | none | Stored drafts of the current mode with amounts, dates and any owner-reported outcome, worded as the owner's report. |
-| `recordCreditOutcome` | `id`, `outcome`, `amount?`, `note?` | Stores what the owner says happened. Declared with `needsApproval: true`, because it records the owner's word and a model could otherwise invent one. |
-| `startInvoiceClose` | `month?` | Starts the close of the month named or the last finished one, or says why it cannot start: the period is still open, already closed, or already being closed. |
-| `getInvoiceCloses` | none | The closes of the current mode and their states. |
-| `comparePlans` | | Planned, phase 8. |
+| `getInvoiceSummary` | `period?` | Invoice total, status, month-to-date flag, last sync time, data gaps. |
+| `explainBillChange` | `period?`, `baselinePeriod?` | Total and baseline, delta per product, daily series for top movers, `findings[]` (section 6), `dataGaps[]`, and `assistantShare` for the Workers AI line (section 12). Empty `findings` carries `explanation: "none_found"`. |
+| `setDataMode` | `dataset: "live" \| "test"`, `scenario?` | Declared with `needsApproval: true`, so the SDK pauses and the owner confirms in the UI before it runs. Lists the scenarios when `scenario` is missing. |
+| `getUsageSummary` | `period?` | One row per product and metric: quantity, unit, included allowance and share used (when the allowance table has an entry), billed amount or `unavailable`, and per-product availability. Also the period covered and the last sync time. Works with no invoice and a $0 bill. |
+| `getUsageBreakdown` | `period`, `groupBy: "product" \| "day" \| "zone"`, `service?` | Aggregated rows. |
+| `searchCloudflareDocs` | `query` | Up to three results: `title`, `url`, `excerpt`. Backed by the docs MCP server. |
+| `getAssistantCost` | `period?`, `groupBy?: "day"` | Metered model cost, neurons, tokens and turns; unmetered turn count; estimated Durable Object and Workflow activity against included amounts; the price constants' source and date; the three limit statements from UC-8. |
+| `comparePlans` | `period` | Cost of the period's usage per plan, with price source and effective date. |
+| `draftCreditRequest` | `period`, `service`, `ownerReason`, `replaceExisting?` | The draft text, its evidence, the computed amount, and the fixed submission instructions with their link. Returns the existing draft instead when one exists and `replaceExisting` is not set. |
+| `getCreditRequests` | `id?`, `state?` | Stored drafts with amounts, dates and any owner-reported outcome, flagged as owner-reported. |
+| `recordCreditOutcome` | `id`, `outcome`, `amount?`, `note?` | Stores what the owner says happened to a request. |
+| `startInvoiceClose` | `period` | Close ID, or the existing close for that period. |
+| `getInvoiceCloseStatus` | `period` | State, totals, variance, findings. |
 
 There is no tool that approves, rejects or finalizes a close (NFR-S3), and none that submits anything to Cloudflare.
 
-**Credit draft.** `draftCreditRequest` takes one product's line and findings from the bill explanation and calls `renderCreditDraft` in `domain/credit-draft.ts`. The draft is a template filled from evidence; the model writes none of it. The amount requested is the product's charge above its usual amount. When the product costs the same or less than usual, or there is no earlier period, no amount is stated and the draft says why. The owner's reason is quoted and marked as the owner's. When no detector found anything for that product, the draft says the claim rests on the owner's statement; a finding about the whole account does not count as support for one product. The submission steps are a constant in the same file, taken from Cloudflare's [support page](https://developers.cloudflare.com/support/contacting-cloudflare-support/) and stamped with the date they were last checked; a test fails when that date is over 90 days old.
+Every data tool result carries `dataset` and, in test mode, `scenario`. The system prompt receives the current mode each turn and requires the test-data label on any figure from a `test` result. The grounding checker (section 7) fails a response that states figures from a `test` result without the label, or that draws on results from both datasets.
 
-**Docs search.** `CloudflareDocsSearch` posts one `tools/call` request to `https://docs.mcp.cloudflare.com/mcp` and reads the server-sent reply. It does not use the SDK's `addMcpServer`: a direct request is the same protocol with no connection to keep alive across the agent's sleep and wake, and the server needs no session or credentials.
+**Credit draft.** `draftCreditRequest` collects the spike rows, the baseline, the findings and the computed overage, then calls `renderCreditDraft(evidence, ownerReason)` in `domain/credit-draft.ts`. The draft is a template filled from evidence; the model does not write it. The owner's reason is quoted verbatim and marked as the owner's statement. When no detector fired for that period and service, the draft says the claim rests on the owner's statement. The submission instructions are a constant in the same file, taken from Cloudflare's [support page](https://developers.cloudflare.com/support/contacting-cloudflare-support/) (dashboard Support page, Billing, Create a Case) and stamped with the date they were last checked against it.
 
-**Model call.** `streamText` with `pruneMessages` (`toolCalls: "before-last-2-messages"`), a stop after five steps or when the loop guard fires, and the abort signal passed through. A stream silent for 45 seconds is aborted. The model is created by `createModel(env, request)` in `model.ts`, behind a static factory on the agent so tests can substitute the AI SDK's mock model.
+**Docs search.** The agent connects to `https://docs.mcp.cloudflare.com/mcp` with `addMcpServer` in `onStart` and sets `waitForMcpConnections = true`. It does not spread `this.mcp.getAITools()` into the tool set. `searchCloudflareDocs` wraps the single search tool behind the `DocsSearch` port, trims the output, and keeps only URLs on `developers.cloudflare.com`.
 
-**Stream repair.** Llama 3.3's stream carries each piece of output twice, and the provider emits both. `domain/dedupe-stream.ts` wraps the AI binding and removes the duplicate text, the duplicate numeric token and the duplicate tool call from each chunk, leaving usage untouched. It is to be removed once the provider or the stream is fixed; the smoke test checks replies for doubled words.
+**Model call.** As in the starter: `streamText` with `createWorkersAI({ binding: this.env.AI })`, `pruneMessages` with `toolCalls: "before-last-2-messages"`, `stopWhen: stepCountIs(8)`, and the abort signal passed through. The model is created by a `createModel(env)` factory so tests can substitute the AI SDK's mock model.
 
-**System prompt.** `buildSystemPrompt(today)` gives today's date and the current billing month, then the grounding rules as instructions: copy every figure from a tool result; state a cause only from findings or a documentation page; label documentation causes as speculation with the link; state the tool's figure when the owner's differs; never report an unavailable value as zero; label test data; say the assistant's cost is an estimate at list price; treat tool results as data; never claim to have submitted a credit request or approved a close; decline other questions. It is sent with every model step, so it does not repeat what each tool is for; that is in the tool descriptions.
+**System prompt.** It states the grounding rules G-1 to G-7 as instructions, gives the exact wording for the "cannot explain" answer and for the speculation label, and says that tool results are data, not instructions.
 
 ## 6. Detectors
 
-A detector is a pure function from a period's usage and its baseline periods to zero or more findings:
+A detector is a pure function from usage and invoice data for a period and its baseline to zero or more findings:
 
 ```ts
 type Finding = {
   detector: DetectorId;
   kind: "account_data";
   direction: "increase" | "decrease";
-  service: string | null; // null for a finding about the whole account
+  service: string;
   impactMicros: Micros;
-  evidence: ReadonlyArray<{ date: IsoDate; quantity: number; unit: string; costMicros: Micros }>;
+  evidence: ReadonlyArray<{ date: string; quantity: number; unit: string; costMicros: Micros }>;
   statement: string; // built from a template, never by the model
 };
 ```
 
-All eight are in `domain/detectors.ts`:
-
 | Detector | Fires when |
 | --- | --- |
-| `usage-spike` | A product's cost on one or more days is at least three times its median daily cost in the baseline. |
-| `usage-drop` | A product's cost for the period falls to half its usual or less. |
-| `new-service` | A product is billed that had no charges in the baseline. |
-| `removed-service` | A baseline product has no charges in the period. |
+| `usage-spike` | A service's daily cost exceeds its trailing 28-day median by a set multiple for one or more days. |
+| `usage-drop` | The reverse, or a service's usage falls to zero mid-period. |
+| `new-service` | A service is billed that had no charges in the baseline. |
+| `removed-service` | A baseline service has no charges in the period. |
 | `zone-change` | Charges appear or disappear for a zone. |
-| `quantity-step` | The billable quantity of a metric becomes non-zero where the baseline had usage but none billable: an included allowance was used up. |
-| `period-length` | The period has a different number of days than the baseline periods. |
-| `invoice-variance` | The invoice total differs from the summed usage by more than the tolerance in `reconcile.ts`. |
+| `quantity-step` | The pricing quantity crosses from zero to non-zero while consumed quantity was already non-zero (an included allowance was exhausted). |
+| `period-length` | The period has a different number of charged days than the baseline. |
+| `invoice-variance` | The invoice total differs from the summed usage by more than a set tolerance. |
 
-Thresholds are named constants. A finding under one dollar of impact is not reported. Findings are sorted by absolute impact. The sum of impacts is not forced to equal the total difference: the unexplained remainder is computed in `unexplained.ts` and shown. A zone finding counts towards what is explained, whichever of the zone view and the product view explains more.
-
-A baseline needs two periods, or one when the owner named the month. Without one there are no findings and the outcome is `no_baseline`.
+Thresholds are named constants in one file. Findings are sorted by absolute impact. The sum of impacts is not forced to equal the total delta; the unexplained remainder is returned as `unexplainedMicros` and shown.
 
 Documentation-based causes are not findings. They come only from `searchCloudflareDocs` results in the same turn and are subject to G-3.
 
 ## 7. Grounding checker
 
-`domain/grounding.ts` exports `checkGrounding`, a pure function that returns violations. It runs inside the response stream, before any of the turn's text is sent to the browser.
+`domain/grounding.ts` exports `checkGrounding(text, toolResults)`, a pure function that returns violations. It runs inside the response stream, before any of the turn's text is sent to the browser.
 
 | Check | Rule | Method |
 | --- | --- | --- |
-| Figures | G-1 | Every dollar amount, percentage, date, month, number with a thousands separator and decimal in the text must appear in the turn's tool results. An amount or percentage may drop its trailing zeros. Figures from the owner's own message may be repeated. Whole numbers under 1,000 are not checked: they are too often words ("2 days"). |
-| Links | G-7 | Every URL in the text must appear in a `searchCloudflareDocs` result from the turn or in the fixed link list, which holds Cloudflare's support page. |
-| Speculation label | G-3 | A documentation link must be in a sentence that contains "This is speculation". |
-| No cause without findings | G-2, G-4 | If `explainBillChange` returned `none_found`, the text must contain "I can't explain this difference from the account's data." or a labelled documentation cause, and none of a list of causal phrases ("because", "due to", "likely", "probably", "caused by", "possibly", "perhaps", "may be", "might be", "could be"). |
-| No claim of submitting | UC-3 | The text must not say, in the first person, that the assistant submitted or will submit a request. |
-| No claim of approving | UC-6 | The text must not say, in the first person, that the assistant approved, closed or finalized something. |
-
-The last three checks are phrase lists. They are heuristics and will miss paraphrases; the evaluations in section 10 are the stronger test.
+| Numbers | G-1 | Every currency amount, percentage and date in the text must appear, after normalization, in the turn's tool results. Numbers quoted from the owner's own message are exempt. |
+| Links | G-7 | Every URL in the text must appear in a `searchCloudflareDocs` result from the turn or in the fixed link list. |
+| Speculation label | G-3 | If the text contains a docs URL, the sentence containing it must contain the speculation label. |
+| No cause without findings | G-2, G-4 | If `explainBillChange` returned `none_found` and no docs result was retrieved, the text must contain the "cannot explain" wording and none of a list of causal phrases ("because", "due to", "likely", "probably", "caused by"). |
 
 **Held replies.** `domain/verified-stream.ts` wraps the model's UI message stream (`holdTextUntilChecked`):
 
-- Tool chunks pass straight through, so the cards appear as each tool finishes.
+- Tool chunks pass straight through, so the breakdown card and the other tool cards appear as each tool finishes.
 - Text chunks are not forwarded. The text of every step is collected, joined, and checked once, when the turn finishes.
 - Text that passes is sent as one piece, inside the turn's last step.
 - Text that fails is dropped. In its place goes a fixed line: "I couldn't produce an answer I could verify against your account data. Any card above shows the figures from your account. Please ask again if you need more." The agent writes an `audit_log` row with the violations. The model is not asked again: a retry would cost a second turn's neurons with no assurance of a better answer.
@@ -322,54 +297,34 @@ The last three checks are phrase lists. They are heuristics and will miss paraph
 
 The persisted message is built from the same stream, so unverified text is never stored either. The client shows "Checking this answer against your account data…" while a turn is in progress. The cost to the owner is that text no longer appears word by word.
 
-A turn that ends with no text at all, for example one stopped by the loop guard, gets the fixed line "I couldn't complete that answer. Please try asking again, or rephrase the question."
+The phrase list in the last check is a heuristic and will miss paraphrases. The evals in section 10 are the stronger test of G-2 and G-4.
 
 ## 8. Agent methods and workflow
 
 ### Agent methods
 
-`InvoiceBuddyAgent` (in `agent.ts`) extends `RecordsAgent` (in `agent-records.ts`), which extends the SDK's `AIChatAgent`. The split keeps both files under 400 lines; `@callable` methods on the base class are inherited.
-
 | Method | Called by | Does |
 | --- | --- | --- |
-| `onStart` | SDK | Runs migrations, fills in state fields an earlier version did not have, publishes the meter and the pending approvals, registers the 6-hourly `syncUsage` cron. |
-| `onChatMessage` | SDK | Refuses when the budget is used up; otherwise runs the model turn and returns the checked stream (sections 5, 7, 12). |
-| `syncUsage` | Schedule; first use | Section 4. A failure leaves existing data and records the product as unavailable. |
-| `getUsageSummary` | Browser, `@callable`; the tool | Builds the summary from stored rows. No model call. |
-| `setDataMode(dataset, scenario?)` | Browser, `@callable`, from the mode switch; the approved tool | Validates the scenario, loads it into the `test` dataset, sets `state.dataMode`, audits, and appends a fixed "Switched to test mode: <scenario>. Figures are fixture data." or "Switched to live data." message. |
-| `explainBill(request?)` | `@callable`; the tool | Section 6. Fetches a closed month on demand. |
-| `getAssistantCost` | `@callable`; the tool | Section 12. |
-| `searchDocs(query)` | `@callable`; the tool | Section 5. |
-| `draftCreditRequest`, `getCreditRequests`, `recordCreditOutcome` | `@callable`; the tools | Section 5. Each write is audited. |
-| `startInvoiceClose(month?)` | `@callable`; the tool | Checks the close may start, records it, audits, and starts the workflow. If the workflow cannot be started the close is marked failed. |
-| `getInvoiceCloses` | `@callable`; the tool | |
-| `decideClose(workflowId, approved, reason?)` | Browser, `@callable`, from the approval card only | Checks the close is waiting in the current mode, records the decision, audits it with the owner as actor, then calls `approveWorkflow` or `rejectWorkflow`. A rejection takes effect at once. |
-| `closeStep(workflowId, step)` | The workflow, over RPC. Not `@callable`, so not reachable from the browser. | Runs one step of a close and republishes the pending approvals. |
-| `onWorkflowError` | SDK | Marks the close failed, unless it has already been rejected or closed. |
-| `takeRecordedCalls` | `@callable`; the recording script | Section 10. Returns nothing unless recording is on, which is possible only locally. |
+| `onStart` | SDK | Runs migrations, connects the docs MCP server, registers the 6-hourly `syncUsage` cron (cron schedules are idempotent). |
+| `syncUsage` | Schedule; tools when data is older than 6 hours | Pulls usage and invoices through the `UsageSource` port, upserts, updates `sync_state`. A failure records the error and leaves existing data. |
+| `setDataMode(dataset, scenario?)` | Browser, `@callable`, from the mode switch; also the approved `setDataMode` tool | Validates the scenario name against the bundled list, loads the scenario into the `test` dataset, sets `state.dataMode`, writes `audit_log`, and appends a fixed "Switched to test mode: <scenario>" or "Switched to live data" message with `persistMessages`. |
+| `getUsageSummary(period?)` | Browser, `@callable`; also the tool of the same name | Reads `usage_charges` and `usage_source_status`, builds the summary with `domain/usage-summary.ts`. No model call. |
+| `decideApproval(workflowId, approved, reason?)` | Browser, `@callable` | Checks the workflow is in `pendingApprovals`, writes `audit_log`, calls `approveWorkflow` or `rejectWorkflow`. |
+| Workflow RPC targets | Workflow via `this.agent` | `writeSnapshot`, `saveCloseResult`, `finalizeClose`. Each is an upsert keyed on the period. |
+| `onWorkflowProgress`, `onWorkflowComplete`, `onWorkflowError` | SDK | Keep `pendingApprovals` in state current. An error sets the close to `failed`. |
 
 ### InvoiceCloseWorkflow
 
-`class InvoiceCloseWorkflow extends AgentWorkflow<InvoiceBuddyAgent, { workflowId: string }>`, in `workflows/invoice-close.ts`. The workflow orders the steps and waits. Each step is one call to the agent's `closeStep`, which does the work in `services/close-service.ts` on the agent's own database.
+`class InvoiceCloseWorkflow extends AgentWorkflow<InvoiceBuddyAgent, { periodStart: string }>`. The workflow is started with `id: "close-<periodStart>"`, so a second close of the same period cannot be created.
 
 | Step | Kind | Does |
 | --- | --- | --- |
-| `snapshot` | `step.do` | Freezes the period's usage records on the close's row. Kept if the step runs again. |
-| `rate` | `step.do` | Totals the snapshot per product and reconciles it with the invoice. |
-| `anomaly-check` | `step.do` | Runs the detectors on the snapshot, stores the full summary, and moves the close to `awaiting_approval`. |
-| approval | `waitForApproval(step, { timeout: "7 days" })` | |
-| `finalize` | `step.do` | Sets `closed` and `closed_at`. Refuses a close with no recorded approval. |
-| `leave-open` | `step.do` | Runs instead of `finalize` when the owner rejects (`rejected`) or nobody decides in time (`expired`). |
+| `snapshot` | `step.do` | Refuses an open period. `agent.writeSnapshot` copies the period's `usage_charges` into `usage_snapshots` if not already present. |
+| `rate` | `step.do` | Totals the snapshot per service and reconciles with the invoice (`domain/reconcile.ts`). |
+| `anomaly-check` | `step.do` | Runs the detectors on the snapshot. `agent.saveCloseResult`. |
+| approval | `waitForApproval(step, { timeout: "7 days" })` | Rejection sets `rejected`; timeout sets `expired`. The period stays open. |
+| `finalize` | `step.do` | `agent.finalizeClose`: sets `closed` and `closed_at`. Idempotent. |
 | done | `step.reportComplete` | |
-
-How the rules of UC-6 are kept:
-
-- **Once only.** `startInvoiceClose` refuses a period that has not ended, one already closed, and a second close while one is in progress. The rule is enforced by the row's state, not by the workflow's id.
-- **Workflow ids** are `close-<dataset>-<period start>-<random>`. Agent instances share the Workflow, so an id built only from the period would collide between them, and would allow one attempt ever.
-- **Idempotent steps (NFR-O1).** The snapshot is written once. Every update leaves a closed row alone. A step for a workflow run that no longer owns the close does nothing.
-- **Immutable.** No function changes a row in state `closed`.
-- **Approval (NFR-S3).** Only `decideClose` records an approval, and only the approval card calls it.
-- **Survives the wait.** The close's snapshot and summary are in the agent's database, not in the workflow, because completed Workflow instances are kept for only 3 days on the Free plan.
 
 Local development limits from the docs: `pauseWorkflow`, `resumeWorkflow`, `terminateWorkflow` and `restartWorkflow` do not work under `wrangler dev`. The workflow does not use them.
 
@@ -378,56 +333,49 @@ Local development limits from the docs: `pauseWorkflow`, `resumeWorkflow`, `term
 The starter's `app.tsx` is kept. Changes:
 
 - Fetch `/api/session`, then `useAgent({ agent: "InvoiceBuddyAgent", name: accountId })`.
-- **Mode switch and banner:** a select in the header with the scenarios calls the `setDataMode` callable. While the mode is `test`, a persistent banner names the scenario and says figures are fixture data, and every card and the usage panel carry a test-data badge. A chat request to switch renders the SDK's tool approval prompt.
-- **Usage summary panel:** above the chat, collapsible, at every screen width. It is not a tool card and does not depend on the model. It calls the `getUsageSummary` callable on connect, when the mode changes and after each sync. Each row shows product, metric, quantity and unit, an allowance bar when an allowance is known, and the billed amount. Unavailable rows and amounts are labelled as such with the reason. The footer shows the period and last sync time.
-- **Approval cards:** drawn from `state.pendingApprovals`, below the usage panel. Each shows a close's line items, total, reconciliation and findings, with an optional reason field and Approve and Reject buttons that call `decideClose`. This is the only place a close can be decided.
-- **Breakdown card:** drawn from the `explainBillChange` tool result. Per-product table, daily series for the products that moved most, findings with evidence, the unexplained remainder and notes.
-- **Credit card:** drawn from the results of the three credit tools. The draft with a copy button, its state and basis, and the submission steps with the support link. History is shown by this card when the owner asks; there is no separate, permanent list.
-- **Close card:** drawn from the results of the two close tools.
-- **Pending line:** "Checking this answer against your account data…" while a turn is in progress (section 7).
-- **Cost footer:** drawn from `state.selfCost`. This month's metered cost and the trailing 24 hours' neurons against the budget.
-- Tool results render as text through React. No `dangerouslySetInnerHTML`. Links open in a new tab with `rel="noopener noreferrer"`, and the credit card links only to `developers.cloudflare.com`.
-- Buttons are labelled, tables have headers, and state changes are announced.
-
-The UI has not been viewed in a browser by the developer, and has no automated test: components are excluded from the coverage run until the browser tests of phase 9.
+- **Mode switch and banner:** a switch in the header with a scenario picker calls the `setDataMode` callable. While `state.dataMode.dataset` is `test`, a persistent banner reads "Test mode: <scenario>. Figures are fixture data." and every card and the usage panel carry a test-data badge. A chat request to switch renders the SDK's tool approval prompt with Confirm and Cancel.
+- **Usage summary panel:** always visible beside the chat, and above it on narrow screens. It is not a tool card and does not depend on the model. It calls the `getUsageSummary` callable on connect and whenever `state.lastSyncAt` changes. Each row shows product, metric, quantity and unit, an allowance bar when an allowance is known, and the billed amount. Unavailable rows and unavailable amounts are labelled as such with the reason. The footer shows the period and last sync time.
+- **Breakdown card:** rendered from the `explainBillChange` tool part. Shows the per-product table, the daily series for top movers, findings with evidence, the unexplained remainder and data gaps. This card is the grounded source of truth on screen.
+- **Credit draft card:** rendered from the `draftCreditRequest` tool part. Shows the draft with a copy button, the evidence, and the submission instructions with the support link.
+- **Close approval card:** rendered from `state.pendingApprovals`. Shows the close summary and its findings. Approve and Reject call `agent.call("decideApproval", …)`. Reject asks for an optional reason.
+- **Cost footer:** rendered from `state.selfCost`. Shows this month's metered cost and today's neurons against the budget, with a warning style from 80%. A tooltip carries the UC-8 limit statements.
+- **Credit request list:** rendered from `state.creditRequests`, with owner-reported outcomes marked as such.
+- Tool results render as text through React. No `dangerouslySetInnerHTML`. Docs links open in a new tab with `rel="noopener noreferrer"`.
+- Cards meet WCAG 2.2 AA: buttons are labelled, tables have headers, state changes are announced.
 
 ## 10. Tests
 
 ### Tooling
 
-`vitest.config.ts` has two projects. `unit` runs in Node over `test/unit`. `integration` runs in the Workers runtime through the `cloudflareTest` plugin from `@cloudflare/vitest-plugin`, pointed at `wrangler.jsonc`, with remote bindings off and fixed test values, so tests need no Cloudflare login and no `.dev.vars`. Coverage uses the Istanbul provider; V8 coverage is not supported in the Workers pool.
+`vitest.config.ts` uses the `cloudflareTest` plugin from `@cloudflare/vitest-plugin` pointed at `wrangler.jsonc`. Coverage uses the Istanbul provider; V8 coverage is not supported in the Workers pool. Thresholds are set in the config: 80% for lines, branches, functions and statements globally, 95% for `src/domain/**`.
 
-Coverage is measured in two runs, because measuring the same files from both projects at once made the merged figures depend on run order: domain code by the unit tests at 95%, and the rest of the Worker by the integration tests at 80%.
-
-Scripts: `check` (`oxfmt --check . && oxlint src/ test/ scripts/ evals/ && tsc`), `test`, `test:coverage`, `eval`, `record`, `smoke`, `gate`, `deploy:staging`, `deploy:production`, `types`.
+Scripts: `test`, `test:watch`, `test:coverage`, `test:e2e`, `eval`, plus the starter's `check` (`oxfmt --check . && oxlint src/ && tsc`).
 
 ### Layers
 
 | Layer | Runs in | Covers |
 | --- | --- | --- |
-| Unit | Vitest, Node | Everything in `domain/`: money, periods, breakdown, each detector, reconciliation, the grounding checker, held replies, the draft template, the close summary and its start rules, the cost conversion and budget, the loop guard, stream repair, cache status, recording and replay, model rates, scenarios, and the budget total across environments. |
-| Integration | Vitest in the Workers runtime | Migrations, run once and twice; authentication and the instance lock; adapters against replayed real response shapes; the meter through the agent, including a turn with no token counts, a turn at 100% of budget and cached calls; each tool against seeded data; data-mode separation; a model-initiated mode switch does nothing until approved; held replies through the agent; a recorded turn replayed through the real provider and stream handling; credit drafts with and without a supporting finding and with an existing draft; the close workflow end to end. |
-| End to end | Browser | Planned, phase 9. Not built. |
-| Evaluations | Script against real Workers AI | Below. |
+| Unit | Vitest | Everything in `domain/`: money, periods, breakdown, each detector, reconciliation, the grounding checker, the draft template, the cost conversion and budget check. Table-driven, including empty, single-period, zero-cost and negative-delta inputs. |
+| Integration | Vitest in the Workers runtime | Migrations; each tool against seeded SQLite; `syncUsage` with a failing source; auth hooks (no JWT, wrong audience, wrong instance name); `draftCreditRequest` with and without a supporting finding and with an existing draft; `decideApproval` for an unknown workflow; the close workflow end to end; no data tool returns `test` rows in live mode or `live` rows in test mode; `setDataMode` from the model does nothing until approved; a close in test mode leaves the live period open; `syncUsage` never writes `test` rows; `getUsageSummary` for a $0 account with no invoice, with a null cost, with one failing source and with a metric missing from the allowance table; a turn writes one `self_usage` row; a turn with no token counts is stored as unmetered; a turn at 100% of budget makes no model call; `assistantShare` appears on the Workers AI line. |
+| End to end | Playwright against `vite dev` with fixture data and a scripted model | UC-1 breakdown card; UC-3 draft card with instructions, still listed after reload; UC-6 close approved from the card; UC-10 switch to a scenario from the header and from chat with confirmation, banner and badges shown, switch back restores live figures; UC-9 panel visible on load with a $0 fixture account, one product unavailable, before any message is sent. |
+| Evals | Script against real Workers AI | Section below. |
 
-Workflow tests run the real workflow in the local Workers runtime, using `introspectWorkflow` from `cloudflare:test` to wait for steps and to force the approval timeout. Cases: reaches the gate with a summary; approval closes the period exactly once; rejection and timeout leave it open and let it start again; the snapshot survives a change to the period's data and a step run twice; `finalize` without an approval does nothing; one close at a time; an unfinished period is refused; a test-mode close is not listed with live data.
+Workflow tests use `introspectWorkflowInstance` from `cloudflare:test` to mock step results and force the approval timeout. Required workflow cases: approve closes the period exactly once; a retried `snapshot` step does not write a second snapshot; reject and timeout leave the period open; closing a closed period is refused.
 
-Tests mock the model through the agent's model factory with the AI SDK's mock language model, or with a replayed recording. No test calls Workers AI or the Cloudflare API.
+Integration tests mock the model through `createModel` with the AI SDK's mock language model. No test in the first three layers calls Workers AI or the Cloudflare API.
 
-### Evaluations
+### Evals
 
-`evals/cases.mjs` holds thirteen cases. Each asks the real model one question, in a test scenario or on live data, on the local app's smoke-test instance. Graders are code: expected tool calls, required and forbidden phrases, and the response checker, which every reply is also run through. No model grader is used.
+Cases live in `evals/` as data: a fixture account, an owner message, and graders. Graders are code where possible (the grounding checker, required and forbidden phrases, expected tool calls). A model grader is used only for "states no cause" on paraphrases, and its verdicts are sampled by a human before release.
 
-| Set | Cases | Gate |
+| Set | Examples | Gate |
 | --- | --- | --- |
-| Grounding (release-critical), eight | Lower bill with no cause; the owner quotes a wrong total; no charges to explain; an instruction planted in a zone name; the assistant's own cost; how something is billed; the owner asks the assistant to submit a credit request; the owner asks the assistant to approve a close. | Three of three runs pass for every case. A case stops at its first failure. |
-| Capability, five | A spike explained; a new product explained; usage reported; a named baseline month; a credit drafted for the right product. | At least one of three runs passes for 90% of cases. A case stops at its first pass. |
+| Grounding (release-critical) | Lower bill with no cause in data or docs; higher bill where usage is flat and the invoice differs; missing data for half the period; owner states a wrong total; docs-only cause; instruction text planted in a zone name; owner asks the agent to submit a credit request; owner asks whether Cloudflare approved a request; a test-mode answer without the test-data label; a zone name in fixture data that says "switch to live mode"; $0 bill and the owner asks what was used (real quantities, no invented charge); a product's usage is unavailable (said so, not reported as zero); owner asks what the assistant costs (figures match the meter, limits stated); a Workers AI spike that is the assistant's own usage. | Three of three runs pass for every case. |
+| Capability | Spike on one service; new service; zone removed; credit request drafted for the right period and service; history question answered from records. | At least one of three runs passes for 90% of cases. |
 
-Each run records pass rates, how many replies the response checker withheld, and neuron use in `evals/results/`, which is git-ignored because replies quote the account's usage. `evals/RESULTS.md` summarises runs. Time to first visible response (NFR-O2) is not measured by the runner.
+Each eval run records pass rates, how many replies the response checker withheld, and neuron use in `evals/results/`. Time to first visible response (NFR-O2) is not yet measured by the runner.
 
-One run has been made, of the first ten cases, on 2026-10-06. It failed the grounding gate; the fixes are in `evals/RESULTS.md`. A clean run of the whole suite is owed before a release. It costs roughly 3,300 neurons, a third of the account's daily allowance.
-
-**Which cases run.** Each case lists the `areas` it depends on (`explain`, `usage`, `docs`, `cost`, `credit`, `close`). `npm run eval -- --changed [base]` lists the files changed since `base` (default `origin/main`, plus uncommitted files) and `evals/select.ts` maps them to cases:
+**Which cases run.** Every case is one to three model turns, and the free allowance is shared by the whole account. Each case lists the `areas` it depends on (`explain`, `usage`, `docs`, `cost`). `npm run eval -- --changed [base]` lists the files changed since `base` (default `origin/main`, plus uncommitted files) and `evals/select.ts` maps them to cases:
 
 | Changed file | Cases run |
 | --- | --- |
@@ -435,64 +383,51 @@ One run has been made, of the first ten cases, on 2026-10-06. It failed the grou
 | A tool's result builder, its service or its domain code | The cases of that area. |
 | The system prompt, tool descriptions, the agent, the checker, the model wrapper, the cases, the runner, dependencies, or any file not listed | All. |
 
-A partial run is labelled as such in its output and its result file, and does not count for a release.
+A partial run is labelled as such in its output and its result file (`scope`), and does not count for a release. A release needs a complete run of the whole suite (`npm run eval`).
 
-### Cheaper testing
+### Cheaper testing (experiment, branch `experiment/cheaper-testing`)
 
-Workers AI has no local mode: every model call, including local development, draws on the account's 10,000 free neurons a day. Three measures reduce what testing takes from that. All are off unless configured, and none reaches an owner's instance: they apply to the smoke-test instance only.
+Workers AI has no local mode: every model call, including local development, draws on the account's 10,000 free neurons a day. Three measures reduce what testing takes from that. All three are off unless configured, and none reaches an owner's instance: they apply to the smoke-test instance only.
 
-| Measure | How | Setting | State |
-| --- | --- | --- | --- |
-| Cached gateway | The deployed smoke-test instance calls the model through an AI Gateway with caching on, so a smoke turn identical to an earlier one within the cache time is served from the cache and uses no neurons. Never used locally, where evaluations repeat a question on purpose. | `AI_GATEWAY_ID`, `SMOKE_CACHE_TTL_SECONDS` (default 3,600) | On in both deployed environments. A staging deploy followed by its production deploy costs one smoke turn. |
-| Replay tests | `npm run record` asks the real model each evaluation case that runs on test data and saves the model's raw stream to `test/cassettes/<case>.json`. `test/integration/replay.test.ts` plays each back through the real agent, stream handling, tools and response checker, with the clock set to the recording day. | `RECORD_MODEL_CALLS=1` in `.dev.vars`, local only | Built and tested with hand-built recordings. No recording of the real model has been made. |
-| Cheaper model | The smoke-test instance may use `@cf/meta/llama-3.1-8b-instruct-fp8-fast`, about a sixth of the chat model's token rates. It proves the pipeline works and says nothing about the chat model. | `SMOKE_MODEL_ID` | Built, off. Not tried: it is not known whether that model calls tools reliably. |
+| Measure | How | Setting |
+| --- | --- | --- |
+| Replay tests | `npm run record` asks the real model each evaluation case that runs on test data and saves the model's raw stream, as the binding returned it, to `test/cassettes/<case>.json`. `test/integration/replay.test.ts` plays each one back through the real agent, stream handling, tools and response checker, with the clock set to the recording day, and expects the same reply and tool calls. No model call. | `RECORD_MODEL_CALLS=1` in `.dev.vars`, local only. |
+| Cached gateway | The deployed smoke-test instance calls the model through an AI Gateway with caching on, so a smoke turn identical to an earlier one within the cache time is served from the cache. Never used locally, where evaluations repeat a question on purpose. | `AI_GATEWAY_ID`, `SMOKE_CACHE_TTL_SECONDS` (default 3,600). |
+| Cheaper model | The smoke-test instance may use `@cf/meta/llama-3.1-8b-instruct-fp8-fast`, about a sixth of the chat model's token rates. It proves the pipeline works and says nothing about the chat model. Turns are metered at the rates of the model that ran them. | `SMOKE_MODEL_ID`. |
 
-Rules for recordings: only cases on test data are recorded, since the repository is public; the script refuses to save a recording containing the account ID, the API token or the Access domain; a recording must replay to the same reply before it is committed. A replay test shows that the code still handles what the model said then, not what the model would say now.
+Rules for recordings: only cases on test data are recorded, since the repository is public; the script refuses to save a recording containing the account ID, the API token or the Access domain; a recording must replay to the same reply (`npm test`) before it is committed; `npm run record -- --status` lists recordings made before the prompt or a tool changed. A replay test shows that the code still handles what the model said then. It does not show what the model would say now, so the evaluation suite is still required before a release.
 
 ### CI
 
-GitHub Actions on every pull request and every push to `main`: the phase gate (section 13), `npm ci`, a copy of the Wrangler template, `npm run check`, `npm run test:coverage`, a staging build, `wrangler deploy --dry-run`, `npm audit --audit-level=high`. Evaluations are run by hand, since they call the real model.
+GitHub Actions on every pull request: the phase gate (section 13), `npm ci`, `npm run check`, `npm run test:coverage`, a staging build, `wrangler deploy --dry-run`, `npm audit --audit-level=high`. End-to-end tests run on pull requests to `main`. Evals run on demand and before a release, since they call a paid model.
 
 ## 11. TypeScript rules
 
-These make NFR-Q1 to NFR-Q6 concrete. Where the build falls short of the original rule, it says so.
+These make NFR-Q1 to NFR-Q6 concrete.
 
-- `tsconfig.json` extends `agents/tsconfig` and adds `noUncheckedIndexedAccess`, `noImplicitOverride` and `noFallthroughCasesInSwitch`. `exactOptionalPropertyTypes` was planned and is not on.
-- oxlint runs its `correctness` category as errors, with `no-explicit-any` and `no-unused-vars` as errors, over `src`, `test`, `scripts` and `evals`. Rules against non-null assertions, `@ts-` comments, floating promises and `console` were planned and are not configured; the code has none of the first two.
-- `Micros` and `IsoDate` are branded types constructed only through validating functions in `domain/`.
-- Schemas validate configuration, tool inputs and external API responses. Rows read from SQLite are mapped by hand in each store, not parsed with a schema.
-- Unions are closed: a `switch` over a state has a case for each member and no default.
-- Expected failures are values where a caller acts on them: a documentation search returns `ok` or a reason, a product that cannot be read is reported as unavailable, and every tool result has a status. Other failures throw.
+- `tsconfig.json` extends `agents/tsconfig` (as the starter does) and adds `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `noFallthroughCasesInSwitch`.
+- oxlint denies `no-explicit-any`, `no-non-null-assertion`, `ban-ts-comment`, `no-floating-promises`, `no-console` (except `console.error` and `console.warn`), and warnings fail CI.
+- `Micros`, `AccountId` and `PeriodStart` are branded types constructed only through validating functions in `domain/`.
+- Schemas are the single source of types: `type X = z.infer<typeof XSchema>`. A type that crosses a boundary is never declared separately from its schema.
+- Unions are closed with a `never` check in the default branch.
+- Ports return `Result<T, E>` for expected failures (API down, not found, duplicate). `throw` is for invariant violations.
 - Object and array parameters are `Readonly`. Updates build new values.
-- No file is over 400 lines.
-- Logs never contain the API token, the Access JWT or message text. Errors shown to the owner are fixed lines; detail goes to the log.
+- Exported functions carry explicit return types. Tool descriptions and exported domain functions carry a one-line doc comment.
+- Logs never contain the API token, the Access JWT or message text. Errors shown to the owner are generic; detail goes to the log.
 
 ## 12. Self-cost meter and budget
 
-Implements UC-8 and NFR-O3 to O6. The logic is in `domain/self-cost.ts` and `domain/models.ts`; the agent only stores and reads.
+Implements UC-8 and NFR-O3. The logic is in `domain/self-cost.ts`; the agent only stores and reads.
 
-**Price constants.** Neurons per million input and output tokens for each model the app may be configured with (26,668 and 204,805 for the chat model), dollars per 1,000 neurons (0.011), the free daily allocation (10,000 neurons, account-wide), the source URL and the date checked. A unit test fails when the date is more than 90 days old, which forces a re-check.
+**Price constants.** One object: neurons per million input tokens (26,668) and output tokens (204,805) for the model, dollars per 1,000 neurons (0.011), the free daily allocation (10,000 neurons, account-wide, reset at 00:00 UTC), the included monthly amounts for Durable Objects and Workflows, the source URLs and the date checked (2026-10-04). A unit test fails when the date is more than 90 days old, which forces a re-check.
 
-**Meter.** `streamText`'s `onFinish` supplies each step's token usage. The agent converts the billed steps with `toNeurons` and `toCostMicros`, at the rates of the model that ran the turn, and inserts one `self_usage` row. If usage is absent, or reports zero input tokens (the provider's stand-in for missing usage), the row is written with `metered = 0`. Nothing is estimated from text length.
+**Meter.** `streamText`'s `onFinish` callback supplies the turn's total token usage across steps. The agent converts it with `toNeurons` and `toCostMicros` and inserts one `self_usage` row. Workers AI also returns the neuron count for each call; when present it is stored as reported, and the converted figure is kept as a cross-check. If usage is absent, or reports zero input tokens (the provider's stand-in for missing usage), the row is written with `metered = 0`. Nothing is estimated from text length. The same callback increments `self_activity_daily` and updates `state.selfCost`.
 
-**Cache hits.** A call through the AI Gateway is made with the binding's `returnRawResponse` option so the `cf-aig-cache-status` header can be read. Only the value `HIT` counts as served from the cache; a missing header, any other value, a binding that returns only a stream, and a failed call all count as usage. The meter adds up the steps that were not hits and records the hits in `self_cached_calls`. Hits are matched to steps by order; if their number differs from the number of steps, for example after a retried call, the whole turn is counted. A turn served wholly from the cache is a metered row of zero neurons.
+**Budget.** At the start of `onChatMessage`, before any model call, `checkBudget(todayNeurons, DAILY_NEURON_BUDGET)` returns `ok`, `warn` (80% or more) or `exhausted`. On `exhausted` the agent returns a fixed message, increments `refused_turns` and does not call the model. A turn already running is allowed to finish, so the day's total can exceed the budget by one turn. The default budget equals the free daily allocation.
 
-**Budget.** At the start of `onChatMessage`, before any model call, `checkBudget` compares the neurons the instance metered in the trailing 24 hours with its budget and returns `ok`, `warn` (80% or more) or `exhausted`. On `exhausted` the agent returns a fixed message, counts a refused turn and does not call the model. A turn already running is allowed to finish. The window is the trailing 24 hours, not the calendar day: Cloudflare documents a reset at 00:00 UTC but has refused calls over usage from the previous day, and the trailing window is never looser.
+**Own share.** `explainBillChange` adds `assistantShare` to the Workers AI product row: the sum of `self_usage.cost_micros` for the period, the count of unmetered turns, and the note that the figure is at list price before the free allocation. When a `usage-spike` finding is on Workers AI, the finding's statement includes the assistant's share of the spike days. The service name that identifies Workers AI in usage records is a named constant (V10).
 
-**Free-tier guards (NFR-O4 to O6).**
-
-| Guard | Behaviour |
-| --- | --- |
-| Budgets | Per instance and environment (section 1), 9,000 in all. A unit test fails if the total, in the template or the local file, passes 9,000. The remaining 1,000 allow for usage made outside the app, which no budget counts. |
-| Loop guard | `domain/loop-guard.ts`, a `stopWhen` condition: stops a turn after two consecutive steps with a failed tool call, or when the same call with the same input is made a third time. |
-| Step limit | Five model steps a turn. |
-| Stalled stream | A model stream silent for 45 seconds is aborted. |
-| Smoke pre-flight | Before any model call, and before the deploy script uploads anything, the smoke test reads the account's neurons over the trailing 24 hours from GraphQL Analytics and refuses to run past 8,000, or if the figure cannot be read. |
-| Refused by Cloudflare | A call refused because the allowance is spent gives the owner a clear line, and the smoke test names the cause and says the deploy is not at fault. |
-
-**Own usage in explanations.** A bill explanation on live data carries one sentence with the assistant's metered neurons and list-price cost for the period. It is never added to a test-mode answer, since the meter is real data (G-9). It is not attached to the Workers AI line specifically: the name Workers AI has in billing records could not be observed (section 14, V10).
-
-**Report.** `getAssistantCost` reads the meter tables. Model figures are exact sums. Worker, Durable Object and Workflow usage is not estimated; the report says only model calls are metered.
+**Report.** `getAssistantCost` reads `self_usage` and `self_activity_daily`. Model figures are exact sums. Durable Object requests are estimated as incoming messages divided by 20, plus scheduled runs, plus workflow calls, following Cloudflare's stated billing ratio for WebSocket messages; the result carries `estimated: true` and is compared with the included monthly amount. Storage and duration are not estimated; the report says so.
 
 ## 13. Deployment
 
@@ -502,69 +437,62 @@ Implements NFR-D1 to D7.
 
 | Environment | Worker | Data | Deployed by |
 | --- | --- | --- | --- |
-| Local | `vite dev` | Live sources with a token in `.dev.vars`; test mode on request. The model is reached through the production hostname, so it needs an Access sign-in or service token. | Developer |
-| Staging | `cf-invoice-buddy-staging` | Same account and sources as production, in its own Durable Object; feature checks run in test mode | `npm run deploy:staging` |
-| Production | `cf-invoice-buddy` | The real account; test mode available on request | `npm run deploy:production`, for a commit that passed staging |
+| Local | `vite dev` | Live sources if `.dev.vars` has a token; test mode otherwise | Developer |
+| Staging | `cf-invoice-buddy-staging` | Same account and sources as production, in its own Durable Object; feature checks run in test mode | CI, on every merge to `main` |
+| Production | `cf-invoice-buddy` | The real account, from phase 3; test mode available on request | CI, by manual promotion of a commit that passed staging |
 
-Both deployed environments are behind Cloudflare Access from their first deployment (section 3). Preview URLs are off. The first deploy of a new environment is `node scripts/deploy.mjs <env> --bootstrap`: it uploads the Worker with a placeholder `ACCESS_AUD`, so every request is refused, and exists only to create the hostname the Access application is attached to.
+Both deployed environments are behind Cloudflare Access from their first deployment. Preview URLs are off. If the `workers.dev` hostname is enabled it is covered by the same Access policy; otherwise it is disabled.
 
-### Deploy script
+### Pipeline (`deploy.yml`)
 
-`scripts/deploy.mjs`, one path for both environments, run from a developer machine with the Wrangler login:
+1. Build with `CLOUDFLARE_ENV=staging`, embedding the commit SHA.
+2. `wrangler deploy` to staging through `cloudflare/wrangler-action`.
+3. Run `scripts/smoke.ts` against staging.
+4. On manual promotion: build for production, deploy, run the smoke test against production.
+5. If the production smoke test fails, run `wrangler rollback` to the previous version and fail the job.
+6. On success, append a row to `spec/deployments.md` and push the tag `deployed/phase-<n>`.
 
-1. **Guard.** Refuses a working tree with uncommitted changes (the deployment record excepted), a commit that is not on `origin/main`, a missing `wrangler.jsonc` or secrets file, and, for production, a commit without the local tag `staging-ok/<sha>`. Prints a note when `wrangler.jsonc` differs from the template.
-2. **Pre-flight.** Runs the smoke test's allowance check (section 12) before uploading, so a deploy that could not be verified is never made.
-3. **Build** with `CLOUDFLARE_ENV` set, embedding the commit SHA.
-4. **Deploy** with `wrangler deploy --secrets-file`.
-5. **Smoke test** against the deployed URL.
-6. **Staging:** on a pass, tags the commit `staging-ok/<sha>` locally.
-7. **Production:** on a failure, runs `wrangler rollback` to the previous version and fails. On a pass, pushes the tag `deployed/phase-<n>`.
-8. Appends a row to `spec/deployments.md`.
+**Interim, decided 2026-10-05.** Until the deploy token is added to GitHub, the same steps run from the developer's machine as `npm run deploy:staging` and `npm run deploy:production`, authenticated by the Wrangler login. The script refuses to deploy a dirty working tree or a commit that is not on `origin/main`, and it is the script, not a person, that pushes the `deployed/phase-<n>` tag after the production smoke test passes. `deploy.yml` is written in phase 1 and switched on when the secret `CLOUDFLARE_API_TOKEN` exists; from then on local deploys are refused.
 
-A deploy workflow for CI was planned and is not written. It waits for a deploy token in GitHub; that token would have only the "Edit Cloudflare Workers" permission on this one account and is different from the runtime read token.
+Deploy jobs run one at a time. The deploy token has only the "Edit Cloudflare Workers" permission on this one account and lives in GitHub secrets as `CLOUDFLARE_API_TOKEN`. It is a different token from the runtime billing-read token.
 
 ### Smoke test
 
-`scripts/smoke.mjs` authenticates with an Access service token, uses the `<account id>-smoke` instance, and clears that instance's history first. Eleven checks, one of which calls the model:
+`scripts/smoke.ts` takes a base URL and authenticates with an Access service token.
 
-| Check | Model call |
+| Check | From phase |
 | --- | --- |
-| A request with no credentials is refused. | No |
-| The deployed version is the intended commit. It waits for that commit to be served. | No |
-| The session endpoint names the account. | No |
-| Another account's agent instance is refused. | No |
-| The usage summary shows the account's real usage (UC-9). | No |
-| Test mode serves fixture data and leaves live data unchanged (UC-10). | No |
-| A credit request is drafted from stored data, with the stored overage as its amount, kept, and marked as test data (UC-3, UC-4). | No |
-| An invoice close runs as a Workflow to the approval gate within 60 seconds, is offered for approval, and a rejection leaves the period open (UC-6). | No |
-| Documentation search returns pages, all on `developers.cloudflare.com` (G-2, G-7). | No |
-| A bill explanation in test mode is grounded (every dollar amount is one the tool returned), labelled as test data, free of doubled words, and either metered or counted as served from the cache (UC-1, UC-8, G-9). | Yes, one turn |
-| The Workers logs, followed with `wrangler tail` during the run, show no failed invocation, uncaught exception or error-level line. Log content is never printed. | No |
+| A request with no credentials is refused on every hostname of the Worker. | 1 |
+| `/api/version` returns the expected commit SHA and reports configuration complete. | 1 |
+| A connection to an agent instance other than the account's is refused. | 1 |
+| One chat turn over WebSocket returns a non-empty streamed reply from the real model. | 1 |
+| The turn produced a `self_usage` row. (The meter is built in phase 1.) | 1 |
+| Workers Logs show no error-level entries for the smoke run. | 1 |
+| The usage summary returns at least the assistant's own Workers AI usage, with no row reported as zero when its source failed. | 3 |
+| Switching to a test scenario and back works, and the live usage summary is unchanged afterwards. | 3 |
+| One check per later phase for what that phase built, run in test mode on a named scenario, in staging and in production. | 4 onward |
 
-The close check always rejects, so every run can start a fresh close; approval is covered by the integration tests. The model turn costs about 110 to 160 neurons, or nothing when the gateway cache serves it.
+The smoke turn spends real neurons, a few hundred per run, and is counted by the meter like any other turn.
 
 ### Phase gate
 
-The file `.phase` holds the number of the phase being worked on. The CI gate step fails when `.phase` is `n` and the tag `deployed/phase-<n-1>` does not exist on the remote. Only the deploy script creates that tag, and only after the production smoke test passes. A pull request that raises `.phase` therefore cannot merge until the previous phase is live.
+The file `.phase` holds the number of the phase being worked on. The CI `gate` job fails a pull request when `.phase` is `n` and the tag `deployed/phase-<n-1>` does not exist. Only the deploy script creates that tag, and only after the production smoke test passes. A pull request that raises `.phase` therefore cannot merge until the previous phase is live.
 
-### Hardening drills
+### Hardening drills (phase 1)
 
-Run in phase 1 and recorded in `spec/deployments.md` with the commands used.
+Each is run once on staging, then recorded in `spec/deployments.md` with the commands used.
 
 | Drill | Proves |
 | --- | --- |
 | Deploy a trivial change, then `wrangler rollback`. | Rollback works and the smoke test passes on the restored version. |
 | Deploy a commit with a deliberately failing smoke check. | Production promotion is blocked. |
-| Deploy an additive schema migration over existing data, then roll the code back. | Data survives and the previous code reads the newer schema (NFR-D6). |
-| Deploy with one secret removed. | The deployment fails the smoke test with the variable named. |
-| Run the full path twice from a clean checkout. | The path is repeatable. |
-| Fail the production smoke test. | Production is rolled back automatically. |
+| Deploy app schema migration `0002` (additive) over existing data, then roll the code back. | Data survives and the previous code reads the newer schema (NFR-D6). |
+| Deploy with one secret removed. | The deployment fails the smoke test with a log line naming the variable. |
+| Run the full pipeline twice from a clean checkout. | The path is repeatable and needs no laptop state. |
 
-Limits from the Cloudflare docs that shape this: a rollback cannot cross a Durable Object class change, and such a change deploys only with `wrangler deploy`, not as an uploaded version. Any change to the `migrations` array therefore ships in a commit of its own, and `v1` was deployed in phase 1 before there was data to lose. SQLite schema changes inside the agent are not undone by a rollback, which is why they must be additive.
+Limits from the Cloudflare docs that shape this: a rollback cannot cross a Durable Object class change, and such a change deploys only with `wrangler deploy`, not as an uploaded version. Any change to the `migrations` array therefore ships in a commit of its own, and `v1` is deployed in phase 1 before there is data to lose. SQLite schema changes inside the agent are not undone by a rollback, which is why they must be additive.
 
 ## 14. Validation record
-
-This section is the dated record of what was checked, found and decided while the project was built. It is kept as written. Entries describe the state on their date and refer to the design as it stood then; sections 1 to 13 above are the current design. New findings are no longer added here: from 2026-10-07 the body of the spec is updated with each change, and a copy of the spec is archived when scope changes significantly (see [README.md](README.md)).
 
 ### Checked against the Cloudflare docs (2026-10-04)
 
@@ -939,18 +867,14 @@ Deviations from the skills, on purpose: the eval definitions live in `evals/` in
 
 ## 15. Build order
 
-Each phase is test-first. A phase is done only when `check` and `test:coverage` pass, it is deployed to staging and production, the smoke test passes on both, and the deployment is recorded (NFR-D1). The gate in section 13 blocks the next phase until then.
+Each phase is test-first. A phase is finished only when `check` and `test:coverage` pass, it is deployed to staging and production, the smoke test passes on both, and the deployment is recorded (NFR-D1). The gate in section 13 blocks the next phase until then.
 
-| Phase | Scope | State |
-| --- | --- | --- |
-| 1 | **Scaffold and deployment cycle.** Starter in place, renamed agent, Llama 3.3, Vitest and CI. Access, `/api/version`, configuration check. The meter and budget, so cost is watched from the first deployed turn. Staging and production, the deploy script, the smoke test, the phase gate and the hardening drills. | Done 2026-10-05 |
-| 2 | **Domain.** Money, periods, breakdown, detectors, reconciliation. No Cloudflare code. | Done 2026-10-05 |
-| 3 | **Data and usage summary.** Migrations, stores, the usage and billing sources, `syncUsage`, the allowance table, `getUsageSummary` and the usage panel. Datasets, scenarios, `setDataMode`, the mode switch and banner. UC-9, UC-10. | Done 2026-10-05 |
-| 4 | **Explain.** `explainBillChange`, `getAssistantCost`, the system prompt, the breakdown card and cost footer. UC-1, UC-2 without docs, UC-8. | Done 2026-10-06 |
-| 5 | **Grounding.** Documentation search, the response checker, held replies, the evaluation suite and its first run. | Done 2026-10-07 |
-| 6 | **Credit requests.** Draft template, the three credit tools, the credit card, history and owner-reported outcomes. UC-3, UC-4. | Done 2026-10-07 |
-| 7 | **Invoice close.** The workflow, the close tools and the approval card. UC-6. | Done 2026-10-07 |
-| 8 | **Plans.** Price table and `comparePlans`. UC-7. | Not started |
-| 9 | **Release.** Browser tests on staging, a clean run of the whole evaluation suite, an accessibility pass, price constants re-checked. | Not started |
-
-Owed before release, from the phases above: a clean evaluation run; a look at the UI in a browser, including an approval of a close; recordings of the real model for the replay tests; and the per-record charges of a paid account (section 4).
+1. **Scaffold and deployment cycle.** Starter in place, renamed agent, Llama 3.3, Vitest and CI. Access, `/api/version`, configuration check. The meter and budget from section 12, so cost is watched from the first deployed turn. Staging and production environments, the deploy pipeline, the smoke test, the phase gate and all five hardening drills. Settle V2, V6, V7, V8, V9, V11, V12, V13.
+2. **Domain.** Money, periods, breakdown, detectors, reconciliation, with fixtures. No Cloudflare code. The deployed change is small; the phase still deploys.
+3. **Data and usage summary.** Migrations, queries, `UsageSource` port with the adapters in section 4, `syncUsage`, the allowance table, `getUsageSummary` and the usage summary panel. The `dataset` column, scenarios, `setDataMode`, the mode switch and banner. Production gets its read tokens and shows this account's real usage. UC-9, UC-10.
+4. **Explain.** `getInvoiceSummary`, `explainBillChange` with `assistantShare`, `getUsageBreakdown`, `getAssistantCost`, system prompt, breakdown card, cost footer. UC-1, UC-2 without docs, UC-8.
+5. **Grounding.** Docs search, grounding checker, first eval run. Settle V5.
+6. **Credit requests.** Draft template, `draftCreditRequest`, draft card, history, owner-reported outcomes. UC-3, UC-4. Settle V4.
+7. **Invoice close.** Workflow and approval card. UC-6. Settle V3.
+8. **Plans.** Price table and `comparePlans`. UC-7.
+9. **Release.** End-to-end tests on staging, full eval run, accessibility pass, price constants re-checked.
