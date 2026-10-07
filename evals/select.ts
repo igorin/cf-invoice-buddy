@@ -4,7 +4,7 @@
  * that use it. A file this list does not know runs every case.
  */
 
-export type Area = "explain" | "usage" | "docs" | "cost";
+export type Area = "explain" | "usage" | "docs" | "cost" | "credit";
 
 /** Files that cannot change what the model is sent or how a reply is graded. */
 const NO_EFFECT: ReadonlyArray<RegExp> = [
@@ -28,10 +28,18 @@ const AREA_FILES: Readonly<Record<Area, ReadonlyArray<RegExp>>> = {
   ],
   usage: [
     /^src\/tools\/usage-summary-tool\.ts$/,
-    /^src\/services\/scenario-service\.ts$/,
+    /^src\/services\/(scenario|usage-summary)-service\.ts$/,
     /^src\/domain\/(usage-summary|allowances|scenarios|scenario-builder)\.ts$/
   ],
   docs: [/^src\/adapters\/docs-search\.ts$/],
+  // A draft is built from the explanation, so the credit cases list the
+  // explain area as well; these are the files only they depend on.
+  credit: [
+    /^src\/tools\/credit-tools\.ts$/,
+    /^src\/services\/credit-service\.ts$/,
+    /^src\/domain\/credit-draft\.ts$/,
+    /^src\/db\/credit-store\.ts$/
+  ],
   cost: [/^src\/db\/self-usage-store\.ts$/, /^src\/domain\/self-cost\.ts$/]
 };
 

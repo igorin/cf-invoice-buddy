@@ -4,6 +4,7 @@ import { useAgentChat } from "@cloudflare/ai-chat/react";
 import { getToolName, isToolUIPart, type UIMessage } from "ai";
 import type { AgentState, InvoiceBuddyAgent } from "./agent";
 import { BreakdownCard, CostFooter } from "./components/breakdown-card";
+import { CreditCard, hasCreditDraft } from "./components/credit-card";
 import {
   DataModeSwitch,
   TestModeBanner,
@@ -114,6 +115,12 @@ function ToolIO({ label, value }: { label: string; value: unknown }) {
   );
 }
 
+const CREDIT_TOOLS = new Set([
+  "draftCreditRequest",
+  "getCreditRequests",
+  "recordCreditOutcome"
+]);
+
 function ToolPartView({
   part,
   addToolApprovalResponse
@@ -134,6 +141,14 @@ function ToolPartView({
         <BreakdownCard output={part.output} />
       </div>
     );
+  }
+
+  // Credit request drafts are shown as cards too (UC-3, UC-4).
+  if (part.state === "output-available" && CREDIT_TOOLS.has(toolName)) {
+    const card = <CreditCard output={part.output} />;
+    if (hasCreditDraft(part.output)) {
+      return <div className="flex justify-start">{card}</div>;
+    }
   }
 
   // Completed

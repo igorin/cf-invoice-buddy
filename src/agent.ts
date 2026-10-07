@@ -16,14 +16,7 @@ import { CloudflareDocsSearch } from "./adapters/docs-search";
 import { GraphqlUsageSource } from "./adapters/graphql-usage";
 import { readConfig, type Config } from "./config";
 import { runMigrations } from "./db/schema";
-import {
-  isPeriodSynced,
-  readBilling,
-  readSourceStatus,
-  readUsage,
-  type Dataset
-} from "./db/usage-store";
-import { ALLOWANCE_SOURCE } from "./domain/allowances";
+import { isPeriodSynced, readBilling, type Dataset } from "./db/usage-store";
 import {
   isoDate,
   periodContaining,
@@ -32,7 +25,6 @@ import {
 } from "./domain/periods";
 import { SCENARIOS } from "./domain/scenarios";
 import { billedUsage, checkBudget } from "./domain/self-cost";
-import { buildUsageSummary } from "./domain/usage-summary";
 import type {
   BillingSource,
   DocsSearch,
@@ -54,6 +46,17 @@ import {
   hasVisibleReply,
   isLooping
 } from "./services/turn-guard";
+import {
+  draftCredit,
+  listCreditViews,
+  reportCreditOutcome,
+  type CreditView,
+  type DraftRequest,
+  type DraftResult,
+  type OutcomeRequest,
+  type OutcomeResult
+} from "./services/credit-service";
+import { readUsageSummaryView } from "./services/usage-summary-service";
 import { fetchClosedMonth, syncCurrentPeriod } from "./services/usage-sync";
 import {
   explainStoredBill,
@@ -71,6 +74,8 @@ const MAX_STEPS_PER_TURN = 5;
 const STREAM_STALL_TIMEOUT_MS = 45_000;
 export const SMOKE_SUFFIX = "-smoke";
 const MAX_QUERY_CHARS = 200;
+// Audit entries for what the owner did or said; the rest are the agent's.
+const OWNER_ACTIONS = new Set(["set_data_mode", "credit_outcome"]);
 
 export const NO_ANSWER_MESSAGE =
   "I couldn't complete that answer. Please try asking again, or rephrase the question.";
@@ -201,7 +206,7 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
   ): void {
     this.sql`
       INSERT INTO audit_log (at, actor, action, subject_id, dataset, detail_json)
-      VALUES (${new Date().toISOString()}, ${action === "set_data_mode" ? "owner" : "agent"},
+      VALUES (${new Date().toISOString()}, ${OWNER_ACTIONS.has(action) ? "owner" : "agent"},
         ${action}, ${subject}, ${this.state.dataMode.dataset},
         ${detail === undefined ? null : JSON.stringify(detail)})`;
   }
@@ -245,28 +250,7 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
     if (mode.dataset === "live" && readBilling(sql, "live") === null) {
       await this.syncUsage();
     }
-    const today = this.today();
-    const period = periodContaining(today, LIVE_ANCHOR_DAY);
-    const stored = readBilling(sql, mode.dataset);
-    const summary = buildUsageSummary({
-      records: readUsage(sql, mode.dataset, period.start, today),
-      period,
-      today,
-      plan: stored?.plan ?? "free",
-      sources: readSourceStatus(sql, mode.dataset),
-      billing: stored?.billing ?? {
-        status: "unavailable",
-        reason: "billing data has not been read yet"
-      }
-    });
-    return {
-      ...summary,
-      dataset: mode.dataset,
-      scenario: mode.dataset === "test" ? mode.scenario : null,
-      plan: stored?.plan ?? "free",
-      lastSyncAt: mode.dataset === "live" ? (stored?.syncedAt ?? null) : null,
-      allowanceSource: ALLOWANCE_SOURCE
-    };
+    return readUsageSummaryView(sql, mode, this.today(), LIVE_ANCHOR_DAY);
   }
 
   /**
@@ -308,6 +292,38 @@ export class InvoiceBuddyAgent extends AIChatAgent<Env, AgentState> {
       anchorDay: LIVE_ANCHOR_DAY,
       ensurePeriod: (period) => this.ensurePeriod(mode.dataset, period, today)
     });
+  }
+
+  /** Writes and stores a credit request draft (UC-3). Submits nothing. */
+  @callable()
+  async draftCreditRequest(request: DraftRequest): Promise<DraftResult> {
+    const explanation = await this.explainBill(
+      request.month ? { month: request.month } : {}
+    );
+    const sql = this.ctx.storage.sql;
+    const result = draftCredit(sql, explanation, request, new Date());
+    if (result.status === "drafted" || result.status === "replaced") {
+      this.audit("credit_draft", result.request.id, result.status);
+    }
+    return result;
+  }
+
+  /** The drafts written so far, in the current data mode (UC-4). */
+  @callable()
+  getCreditRequests(): CreditView[] {
+    return listCreditViews(this.ctx.storage.sql, this.state.dataMode.dataset);
+  }
+
+  /** Stores what the owner says became of a request (UC-4). Never verified. */
+  @callable()
+  recordCreditOutcome(request: OutcomeRequest): OutcomeResult {
+    const dataset = this.state.dataMode.dataset;
+    const sql = this.ctx.storage.sql;
+    const result = reportCreditOutcome(sql, dataset, request, new Date());
+    if (result.status === "recorded") {
+      this.audit("credit_outcome", result.request.id, result.request.state);
+    }
+    return result;
   }
 
   /** What the assistant itself has cost (UC-8). Always real, in either mode. */

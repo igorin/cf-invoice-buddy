@@ -201,3 +201,32 @@ describe("checkGrounding", () => {
     expect(rules(text)).toEqual(["G-1", "G-7"]);
   });
 });
+
+describe("claims of submitting a credit request (UC-3)", () => {
+  const rules = (text: string) =>
+    checkGrounding(input(text)).map((violation) => violation.rule);
+
+  it.each([
+    "I have submitted the request to Cloudflare.",
+    "I've submitted it for you.",
+    "I submitted your credit request.",
+    "I will submit the request now.",
+    "I'll submit this to Cloudflare support.",
+    "I can submit it on your behalf.",
+    "I have now filed the case.",
+    "I just sent the request."
+  ])("flags %j", (text) => {
+    expect(rules(text)).toEqual(["UC-3"]);
+  });
+
+  it.each([
+    "I cannot submit the request; you submit it from the dashboard.",
+    "I can't submit it for you.",
+    "This is a draft. Submit it yourself with the steps in the card.",
+    "As you reported, the request was submitted.",
+    "You told me it has been submitted and approved.",
+    "I have drafted the request."
+  ])("allows %j", (text) => {
+    expect(rules(text)).toEqual([]);
+  });
+});
