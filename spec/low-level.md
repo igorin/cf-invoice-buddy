@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | Describes the system as built through phase 8. Phase 9 is planned and marked as such. |
+| Status | Describes the system as built through phase 8, and the part of phase 9 done so far. What remains of phase 9 is marked as such. |
 | Last updated | 2026-10-07 |
 | Implements | [high-level.md](high-level.md) |
 | Original | [archived/2026-10-04-original/low-level.md](archived/2026-10-04-original/low-level.md), written before any code |
@@ -30,7 +30,7 @@ The starter pins older versions than the current releases. The project runs on t
 | `vitest` | not included | 4.1.11, the major the Cloudflare Vitest plugin requires |
 | `typescript` | 6.0 | 6.0.3, unchanged |
 
-Also added: `jose` for Access tokens, `zod`, `@cloudflare/vitest-plugin` and `@vitest/coverage-istanbul`. `package.json` carries npm `overrides` for `@modelcontextprotocol/sdk`, `@modelcontextprotocol/client` and `sharp`, which pin patched versions until `agents` and `miniflare` release with them. Playwright is not installed; browser tests are planned for phase 9.
+Also added: `jose` for Access tokens, `zod`, `@cloudflare/vitest-plugin` and `@vitest/coverage-istanbul`. `package.json` carries npm `overrides` for `@modelcontextprotocol/sdk`, `@modelcontextprotocol/client` and `sharp`, which pin patched versions until `agents` and `miniflare` release with them. `@playwright/test` and `@axe-core/playwright` run the browser tests (section 10).
 
 `chatRecovery = true` from the starter no longer type-checks on `@cloudflare/ai-chat` 0.12 and is omitted; the SDK default applies.
 
@@ -92,6 +92,7 @@ Variables, per environment:
 | `SMOKE_DAILY_NEURON_BUDGET` | 2,500 | 1,600 | 600 | The smoke-test instance's budget. The six add up to 8,600: 3,000 local, 2,000 staging, 3,600 production. |
 | `AUTH_MODE` | `dev` | `access` | `access` | Section 3. |
 | `AI_GATEWAY_ID`, `SMOKE_MODEL_ID` | not set | empty in the template | empty in the template | Optional, for cheaper testing (section 10). |
+| `SCRIPTED_MODEL` | set only by the browser tests | ignored | ignored | Section 10. |
 
 Secrets: `CF_ACCOUNT_ID`, `CF_API_TOKEN` (Billing: Read and Account Analytics: Read), `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`. The account ID and the Access values are treated as secrets because the repository is public. Locally they are in `.dev.vars`. For a deployed environment they are in `.secrets/<environment>.env`, uploaded by `wrangler deploy --secrets-file`, so one command sets code and secrets together. Both are git-ignored. Env types come from `npm run types` (`wrangler types`); they are not written by hand.
 
@@ -127,15 +128,17 @@ src/
     grounding.ts verified-stream.ts   response checker and held replies (section 7)
     self-cost.ts models.ts            meter, budget, model rates (section 12)
     loop-guard.ts dedupe-stream.ts cache-status.ts model-recording.ts
+    scripted-model.ts                 stand-in for the model in browser tests (section 10)
     scenarios.ts scenario-builder.ts  test-mode data (section 4)
   ports/sources.ts        UsageSource, BillingSource, DocsSearch
   adapters/               graphql-usage.ts, billing.ts, docs-search.ts
   db/                     schema.ts (migrations) and one store per table group
   app.tsx, components/    chat UI (starter, plus the panels and cards in section 9)
 test/
-  unit/  integration/  fixtures/  cassettes/
+  unit/  integration/  e2e/  fixtures/  cassettes/
 evals/                    cases.mjs, select.ts, RESULTS.md
-scripts/                  deploy.mjs, smoke.mjs, eval.mjs, record.mjs, check-phase-gate.mjs, agent-client.mjs, lib.mjs
+scripts/                  deploy.mjs, smoke.mjs, eval.mjs, record.mjs, e2e-config.mjs, check-phase-gate.mjs, agent-client.mjs, lib.mjs
+playwright.config.ts      browser tests (section 10)
 .github/workflows/ci.yml
 .claude/skills/cloudflare-platform-notes/   what the project has observed about Cloudflare's platform
 ```
@@ -293,7 +296,7 @@ All eight are in `domain/detectors.ts`:
 | `period-length` | The period has a different number of days than the baseline periods. |
 | `invoice-variance` | The invoice total differs from the summed usage by more than the tolerance in `reconcile.ts`. |
 
-Thresholds are named constants. A finding under one dollar of impact is not reported. Findings are sorted by absolute impact. The sum of impacts is not forced to equal the total difference: the unexplained remainder is computed in `unexplained.ts` and shown. A zone finding counts towards what is explained, whichever of the zone view and the product view explains more.
+Thresholds are named constants. A finding under one dollar of impact is not reported. Findings are sorted by absolute impact. The sum of impacts is not forced to equal the total difference: the unexplained remainder is computed in `unexplained.ts` and shown. A zone finding counts towards what is explained, whichever of the zone view and the product view explains more. A period-length finding is about the whole account and is counted against whatever those leave; before 2026-10-07 it was not, so a month that was cheaper only because it was shorter showed that amount as both found and unexplained.
 
 A baseline needs two periods, or one when the owner named the month. Without one there are no findings and the outcome is `no_baseline`.
 
@@ -394,7 +397,7 @@ The starter's `app.tsx` is kept. Changes:
 - Tool results render as text through React. No `dangerouslySetInnerHTML`. Links open in a new tab with `rel="noopener noreferrer"`, and the credit card links only to `developers.cloudflare.com`.
 - Buttons are labelled, tables have headers, and state changes are announced.
 
-The UI has not been viewed in a browser by the developer, and has no automated test: components are excluded from the coverage run until the browser tests of phase 9.
+The usage panel and the approval cards are each capped at under half the window's height and scroll inside, so the conversation always has room. The conversation area can be focused and scrolled from the keyboard. The UI was first viewed in a browser on 2026-10-07 through the browser tests (section 10), which found both of those faults; components are not counted in the coverage runs.
 
 ## 10. Tests
 
@@ -404,7 +407,7 @@ The UI has not been viewed in a browser by the developer, and has no automated t
 
 Coverage is measured in two runs, because measuring the same files from both projects at once made the merged figures depend on run order: domain code by the unit tests at 95%, and the rest of the Worker by the integration tests at 80%.
 
-Scripts: `check` (`oxfmt --check . && oxlint src/ test/ scripts/ evals/ && tsc`), `test`, `test:coverage`, `eval`, `record`, `smoke`, `gate`, `deploy:staging`, `deploy:production`, `types`.
+Scripts: `check` (`oxfmt --check . && oxlint src/ test/ scripts/ evals/ && tsc`), `test`, `test:coverage`, `test:e2e`, `eval`, `record`, `smoke`, `gate`, `deploy:staging`, `deploy:production`, `types`.
 
 ### Layers
 
@@ -412,12 +415,14 @@ Scripts: `check` (`oxfmt --check . && oxlint src/ test/ scripts/ evals/ && tsc`)
 | --- | --- | --- |
 | Unit | Vitest, Node | Everything in `domain/`: money, periods, breakdown, each detector, reconciliation, the grounding checker, held replies, the draft template, the close summary and its start rules, the plan comparison and its price table, the cost conversion and budget, the loop guard, stream repair, cache status, recording and replay, model rates, scenarios, and the budget total across environments. |
 | Integration | Vitest in the Workers runtime | Migrations, run once and twice; authentication and the instance lock; adapters against replayed real response shapes; the meter through the agent, including a turn with no token counts, a turn at 100% of budget and cached calls; each tool against seeded data; data-mode separation; a model-initiated mode switch does nothing until approved; held replies through the agent; a recorded turn replayed through the real provider and stream handling; credit drafts with and without a supporting finding and with an existing draft; the close workflow end to end; plan comparison for the current and a named month. |
-| End to end | Browser | Planned, phase 9. Not built. |
+| End to end | Playwright, Chromium, against the app run locally with a scripted model | UC-9 panel on screen before any message, and under half the window; UC-10 switch from the header, labelled, kept across a reload, and back; UC-10 switch asked for in chat, rejected and then approved; UC-1 breakdown card; UC-3 draft card with the submission steps, still there after a reload; UC-7 plan card; UC-6 close approved from the approval card, then reported as final. Five of the seven tests also check the page with axe and fail on any serious or critical WCAG 2.2 AA violation. |
 | Evaluations | Script against real Workers AI | Below. |
 
 Workflow tests run the real workflow in the local Workers runtime, using `introspectWorkflow` from `cloudflare:test` to wait for steps and to force the approval timeout. Cases: reaches the gate with a summary; approval closes the period exactly once; rejection and timeout leave it open and let it start again; the snapshot survives a change to the period's data and a step run twice; `finalize` without an approval does nothing; one close at a time; an unfinished period is refused; a test-mode close is not listed with live data.
 
-Tests mock the model through the agent's model factory with the AI SDK's mock language model, or with a replayed recording. No test calls Workers AI or the Cloudflare API.
+Tests mock the model through the agent's model factory with the AI SDK's mock language model, or with a replayed recording. No unit or integration test calls Workers AI or the Cloudflare API.
+
+**Browser tests.** `npm run test:e2e` runs `scripts/e2e-config.mjs` and then Playwright. The script writes `wrangler.e2e.jsonc` (git-ignored) from the template, without the AI binding and with `SCRIPTED_MODEL=1`, and empties the tests' own local state in `.wrangler/e2e-state`, so every run starts the same. Playwright starts `vite dev` on that configuration. With `SCRIPTED_MODEL` on, `createModel` answers from `domain/scripted-model.ts` in place of Workers AI: it picks a tool from words in the owner's message, and once the tool has returned it writes one fixed line with no figure in it. The flag works only when `ENVIRONMENT` is `local`. The tests therefore check the app, its tools, the real local Workflow and the cards, not the model, and they make no model call. They do read the account's real usage through `.dev.vars`, read-only, for the usage panel. They are run by hand, not in CI, which has no `.dev.vars`.
 
 ### Evaluations
 
@@ -957,6 +962,6 @@ Each phase is test-first. A phase is done only when `check` and `test:coverage` 
 | 6 | **Credit requests.** Draft template, the three credit tools, the credit card, history and owner-reported outcomes. UC-3, UC-4. | Done 2026-10-07 |
 | 7 | **Invoice close.** The workflow, the close tools and the approval card. UC-6. | Done 2026-10-07 |
 | 8 | **Plans.** Price table, `comparePlans`, the plan card and the estimate rule in the checker. UC-7. | Done 2026-10-07 |
-| 9 | **Release.** Browser tests on staging, a clean run of the whole evaluation suite, an accessibility pass, price constants re-checked. | Not started |
+| 9 | **Release.** Browser tests, an accessibility pass, price constants re-checked, and a clean run of the whole evaluation suite. | In progress. Done on 2026-10-07: browser tests for six use cases, run locally with a scripted model and not on staging; axe checks in them, which found two faults, both fixed; every price constant re-read from Cloudflare's pages. Still to do: the evaluation run, then the deploy. |
 
-Owed before release, from the phases above: a clean evaluation run, which would also be the first time a credit request, a close or a plan comparison is asked of the real model; a look at the UI in a browser, including an approval of a close; recordings of the real model for the replay tests; and the per-record charges of a paid account (section 4).
+Owed before release, from the phases above: a clean evaluation run, which would also be the first time a credit request, a close or a plan comparison is asked of the real model; recordings of the real model for the replay tests; and the per-record charges of a paid account (section 4).

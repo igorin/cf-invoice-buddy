@@ -169,6 +169,18 @@ describe("summariseClose (UC-6)", () => {
     );
   });
 
+  it("does not list as unexplained a difference the period's length accounts for", () => {
+    // A flat $4.00 a day: 30 days against two baseline months of 31.
+    const summary = summariseClose(
+      input({ snapshot: month("2026-09-01", 30, "Workers", 4) })
+    );
+    expect(summary.total).toBe("$120.00");
+    expect(summary.findings.map((finding) => finding.statement)).toEqual([
+      expect.stringContaining("30 days against a usual 31")
+    ]);
+    expect(summary.unexplained).toBe("$0.00");
+  });
+
   it("copes with a period that had no usage", () => {
     const summary = summariseClose(
       input({ snapshot: [], billing: { status: "none" } })

@@ -512,7 +512,13 @@ function Chat({ accountId }: { accountId: string }) {
       <ApprovalCards state={agentState} calls={agent.stub} />
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto">
+      {/* Focusable, so the conversation can be scrolled from the keyboard. */}
+      <section
+        aria-label="Conversation"
+        // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+        tabIndex={0}
+        className="flex-1 overflow-y-auto"
+      >
         <div className="max-w-3xl mx-auto px-5 py-6 space-y-5">
           {messages.length === 0 && (
             <Empty
@@ -668,7 +674,7 @@ function Chat({ accountId }: { accountId: string }) {
 
           <div ref={messagesEndRef} />
         </div>
-      </div>
+      </section>
 
       {/* Input */}
       <div className="border-t border-kumo-line bg-kumo-base">

@@ -300,14 +300,14 @@ Recorded on 2026-10-07, after phase 7. Each is owed, or is a rule the build does
 
 | Requirement | Gap |
 | --- | --- |
-| NFR-T4 | There are no end-to-end browser tests. They are planned for phase 9. The UI has no automated test and has not been viewed in a browser by the developer. |
+| NFR-T4 | The browser tests run locally, with a scripted model in place of Workers AI, and by hand: they are not part of CI and do not run against staging. |
 | NFR-T5 | One evaluation run has been made, of ten of the thirteen cases, and it failed the grounding gate before fixes. A clean run of the whole suite is owed before release. |
 | NFR-Q1, NFR-Q6 | The linter enforces no `any` and its correctness rules. Rules against non-null assertions, `@ts-` comments, floating promises and `console` are not configured, and `exactOptionalPropertyTypes` is off. |
 | NFR-Q2 | Configuration, tool inputs and external API responses are validated with schemas. Rows read from SQLite are mapped by hand, and workflow parameters are a single id. |
 | NFR-O2 | The time to first visible response is not measured. |
 | NFR-D2 | Deploys still run from a developer machine. The CI deploy waits for a deploy token in GitHub. A deploy also takes its Wrangler configuration from a local file that is not in git. |
 | NFR-D7 | The record holds phase, time, environment, commit and result, not the Worker version id. |
-| UC-6 | An approval has been tested in the local runtime, not on the deployed app, where the smoke test only rejects. The seven-day wait rests on the platform's documented behaviour. |
+| UC-6 | An approval has been tested in the local runtime and from the approval card in a browser, not on the deployed app, where the smoke test only rejects. The seven-day wait rests on the platform's documented behaviour. |
 
 ## 9. Exercise criteria
 

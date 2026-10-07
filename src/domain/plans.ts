@@ -26,8 +26,8 @@ export type Rate = Readonly<{
 
 /** Workers Paid list prices. Included amounts are in allowances.ts. */
 export const PRICE_TABLE = {
-  /** The earliest date any of these was read from the pages below. */
-  checkedOn: "2026-10-06",
+  /** The date these were last read from the pages below. */
+  checkedOn: "2026-10-07",
   urls: [
     "https://developers.cloudflare.com/workers/platform/pricing/",
     "https://developers.cloudflare.com/workers-ai/platform/pricing/",

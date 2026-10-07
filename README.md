@@ -21,7 +21,7 @@ Last updated 2026-10-07. The build follows nine phases set out in [spec/low-leve
 | 6 | Credit request drafts, history and owner-reported outcomes | Done |
 | 7 | Monthly invoice close, run as a Workflow with an owner approval gate | Done |
 | 8 | Plan comparison: an estimate of the month's usage on Workers Free and Workers Paid | Done |
-| 9 | Release | Not started |
+| 9 | Release: browser tests, accessibility pass, price re-check, clean evaluation run | In progress; the evaluation run and the deploy remain |
 
 What works today, in both deployed environments:
 
@@ -164,6 +164,7 @@ In test mode a close runs on fixture data, is labelled as such, and closes no re
 npm run dev            # local app against the real model; see the note below
 npm run check          # format, lint, type check
 npm run test:coverage  # unit and integration tests with coverage thresholds
+npm run test:e2e       # browser tests against the local app with a scripted model; no model calls
 npm run eval           # whole evaluation suite against the real model; needs `npm run dev` running
 npm run eval -- --changed   # only the cases affected by changes since origin/main
 npm run record         # record the real model's answers for the replay tests; see spec/low-level.md, section 10

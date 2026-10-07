@@ -20,6 +20,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "COVERAGE_SCOPE=domain vitest run --project unit --coverage && COVERAGE_SCOPE=app vitest run --project integration --coverage",
+    "test:e2e": "node scripts/e2e-config.mjs && playwright test",
     "deploy:staging": "node scripts/deploy.mjs staging",
     "deploy:production": "node scripts/deploy.mjs production",
     "smoke": "node scripts/smoke.mjs",
@@ -43,9 +44,11 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@babel/plugin-proposal-decorators": "^8.0.2",
     "@cloudflare/vite-plugin": "^1.62.5",
     "@cloudflare/vitest-plugin": "^1.3.6",
+    "@playwright/test": "^1.63.0",
     "@rolldown/plugin-babel": "^0.2.3",
     "@tailwindcss/vite": "^4.3.1",
     "@types/node": "^26.0.1",

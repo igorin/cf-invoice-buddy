@@ -188,7 +188,7 @@ export function ApprovalCards({
   const pending = state?.pendingApprovals ?? [];
   if (pending.length === 0) return null;
   return (
-    <div className="px-5 py-3 space-y-3 border-b border-kumo-line">
+    <div className="px-5 py-3 space-y-3 border-b border-kumo-line max-h-[45vh] overflow-y-auto shrink-0">
       {pending.map((close) => (
         <ApprovalCard key={close.workflowId} close={close} calls={calls} />
       ))}
