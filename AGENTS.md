@@ -2,6 +2,15 @@
 
 STOP. Your knowledge of Cloudflare Workers APIs and limits may be outdated. Always retrieve current documentation before any Workers, KV, R2, D1, Durable Objects, Queues, Vectorize, AI, or Agents SDK task.
 
+## Project knowledge: read this first
+
+This project keeps what it has observed about Cloudflare's platform in [.claude/skills/cloudflare-platform-notes/SKILL.md](.claude/skills/cloudflare-platform-notes/SKILL.md): Workers AI limits, pricing and stream behaviour, AI Gateway caching, the Agents SDK, Workflows, the billing and analytics APIs, Access, Wrangler and testing.
+
+- **Look there before you design, debug or test** anything that touches those. Many entries record behaviour that differs from what the documentation suggests, with the date it was seen.
+- **Each entry is marked** Observed, Documented or Open. Do not design on an Open entry without a live check.
+- **If Cloudflare's current documentation explicitly contradicts an entry, update the file.** Change the entry to say what the documentation now states, with the page and the date you read it, and mark it Documented until it has been seen on the platform. Do not delete an Observed entry because the documentation disagrees: keep what was observed, with its date, next to what the documentation says, so the difference is visible.
+- **Add to it** when you learn something about the platform that cost time to find out. Mark it Observed only if you saw it happen.
+
 ## Docs
 
 - https://developers.cloudflare.com/workers/

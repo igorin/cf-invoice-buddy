@@ -46,6 +46,8 @@ const ACCOUNT_DAILY_NEURON_LIMIT = 10_000;
 const WINDOW_HOURS = 24;
 const ACCOUNT_NEURON_RESERVE = 2_000;
 const RUN_NEURON_ESTIMATE = 250;
+// How long a Workflow may take to reach, or leave, the approval gate.
+const CLOSE_WAIT_MS = 60_000;
 
 const results = [];
 async function check(name, body) {
@@ -369,6 +371,72 @@ await check(
     expect(
       live.every((item) => item.dataset === "live"),
       "a test-mode draft is listed with live data"
+    );
+  }
+);
+
+await check(
+  "an invoice close runs as a Workflow to the approval gate, and a rejection leaves the period open (UC-6)",
+  async () => {
+    expect(agent, "no agent session");
+    const closes = () => agent.call("getInvoiceCloses");
+    /** Waits until the close of this workflow run reaches one of the states. */
+    const waitFor = async (workflowId, states) => {
+      const deadline = Date.now() + CLOSE_WAIT_MS;
+      for (;;) {
+        const close = (await closes()).find(
+          (item) => item.workflowId === workflowId
+        );
+        if (close && states.includes(close.state)) return close;
+        expect(
+          Date.now() < deadline,
+          `the close is still "${close?.state ?? "missing"}" after ${CLOSE_WAIT_MS / 1000} seconds`
+        );
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+    };
+    await agent.call("setDataMode", ["test", SPIKE_SCENARIO]);
+    try {
+      // No model call. An earlier run may have left a close waiting.
+      const started = await agent.call("startInvoiceClose");
+      expect(
+        started.status === "started" || started.status === "in_progress",
+        `status is ${started.status}`
+      );
+      const { workflowId, month } = started.close;
+      const waiting = await waitFor(workflowId, ["awaiting_approval"]);
+      expect(waiting.testData, "a close of test data is not marked");
+      expect(
+        /^\$[\d,]+\.\d{2}$/.test(waiting.summary?.total ?? ""),
+        "the close has no total"
+      );
+      expect(
+        (waiting.summary?.lineItems ?? []).length > 0,
+        "the close has no line items"
+      );
+      expect(
+        (agent.states.at(-1)?.pendingApprovals ?? []).some(
+          (item) => item.workflowId === workflowId
+        ),
+        "the close is not offered for approval"
+      );
+      const decision = await agent.call("decideClose", [
+        workflowId,
+        false,
+        "Smoke test."
+      ]);
+      expect(decision.status === "rejected", `decision is ${decision.status}`);
+      const after = await waitFor(workflowId, ["rejected"]);
+      expect(after.closedAt === null, "a rejected close has a closing time");
+      console.log(
+        `  close of ${month} (${waiting.summary.total}) reached the approval gate and was rejected; the period is open`
+      );
+    } finally {
+      await agent.call("setDataMode", ["live"]);
+    }
+    expect(
+      (await closes()).every((item) => item.dataset === "live"),
+      "a test-mode close is listed with live data"
     );
   }
 );

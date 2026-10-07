@@ -7,6 +7,7 @@ import {
   MONTH_PATTERN,
   type ExplainRequest
 } from "../services/explain-service";
+import { buildCloseTools } from "./close-tools";
 import { buildCreditTools } from "./credit-tools";
 import { describeForModel } from "./explain-tool";
 import { describeSummaryForModel } from "./usage-summary-tool";
@@ -126,6 +127,7 @@ export function buildTools(agent: InvoiceBuddyAgent) {
         };
       }
     }),
-    ...buildCreditTools(agent)
+    ...buildCreditTools(agent),
+    ...buildCloseTools(agent)
   };
 }

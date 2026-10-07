@@ -3,35 +3,37 @@ Experimental AI bot that runs on Cloudflare and explains why the invoice is what
 
 Specs are in [spec/](spec/).
 
+What the project has learned about Cloudflare's platform, from Workers AI limits and stream quirks to AI Gateway caching, the usage APIs and Workflows, is kept in a skill file for coding agents: [.claude/skills/cloudflare-platform-notes/SKILL.md](.claude/skills/cloudflare-platform-notes/SKILL.md). It is worth reading for people too. [AGENTS.md](AGENTS.md) tells agents when to use it.
+
 ## Implementation status
 
 Last updated 2026-10-07. The build follows nine phases set out in [spec/low-level.md](spec/low-level.md), section 15. Each phase must be deployed to Cloudflare and pass a smoke test before the next begins.
 
-**Phases 1 to 6 of 9 are deployed.** They run in staging and production behind Cloudflare Access, and both environments pass the smoke test. Full test run takes a significant amount of daily neurons and production deployments with full end to end test pass can be done ~1 a day.
+**Phases 1 to 6 of 9 are done.** A phase is done when it runs in staging and production behind Cloudflare Access and both environments pass the smoke test. Full test run takes a significant amount of daily neurons and production deployments with full end to end test pass can be done ~1 a day.
 
 | Phase | Scope | Status |
 | --- | --- | --- |
-| 1 | Scaffold, authentication, the assistant's own cost meter and budget, deployment cycle | Deployed to staging and production; hardening drills passed |
-| 2 | Billing domain logic: money, periods, breakdowns, anomaly detectors | Deployed. The logic is tested but not yet used by the agent |
-| 3 | Usage data, usage summary panel, test mode | Deployed |
-| 4 | Bill explanations and the assistant's cost report | Deployed |
-| 5 | Documentation search and grounding checks, with each reply held until it is checked | Deployed |
-| 6 | Credit request drafts, history and owner-reported outcomes | Deployed |
-| 7 | Monthly invoice close | Not started |
+| 1 | Scaffold, authentication, the assistant's own cost meter and budget, deployment cycle | Done |
+| 2 | Billing domain logic: money, periods, breakdowns, anomaly detectors | Done |
+| 3 | Usage data, usage summary panel, test mode | Done |
+| 4 | Bill explanations and the assistant's cost report | Done |
+| 5 | Documentation search and grounding checks, with each reply held until it is checked | Done |
+| 6 | Credit request drafts, history and owner-reported outcomes | Done |
+| 7 | Monthly invoice close, run as a Workflow with an owner approval gate | Code complete; not yet deployed |
 | 8 | Plan comparison | Not started |
 | 9 | Release | Not started |
 
 What works today, in both deployed environments:
 
-- A chat agent on Llama 3.3 over the starter chat UI. It reports the account's usage from real data and explains a month's bill against a baseline, stating only causes found in the account's data.
-- A usage summary panel, always on screen: what each product used this period, against its included allowance, and what was billed. It works on an account with a $0 bill.
-- Test mode: the owner can switch to one of four fixture accounts and back. A switch asked for in chat needs the owner's confirmation.
-- Sign-in enforcement through Cloudflare Access tokens, and a lock so only the account's own agent instance can be reached.
-- The cost meter and daily budget.
-- The billing logic the later phases build on: breakdowns against a baseline, eight anomaly detectors and invoice reconciliation. The agent does not call it yet.
-- A bill breakdown card and the assistant's own cost report and running meter.
-- 277 automated tests, format, lint, type check and build, run by CI on every pull request.
-- One-command deploys with a smoke test that asks real usage and bill questions, checks the answers against the data, and checks the Worker's logs. The record is in [spec/deployments.md](spec/deployments.md).
+- **Chat.** An agent on Llama 3.3 over the starter chat UI. Each reply is held until it has been checked against the account's data, and is shown only if every figure and link in it came from a tool result.
+- **Usage summary.** A panel that is always on screen: what each product used this period, against its included allowance, and what was billed. It works on an account with a $0 bill.
+- **Bill explanations.** A month's bill against a baseline, per product and per day, with causes stated only when a detector found them in the account's data or a Cloudflare documentation page describes them. When neither holds, the agent says it cannot explain the difference.
+- **Credit requests.** A draft built from the account's data with a fixed template, with the steps for submitting it yourself. The agent submits nothing. Drafts are kept, and what you report about them is stored as your report.
+- **The assistant's own cost.** A meter of its model usage, a daily budget, and a cost report.
+- **Test mode.** Five fixture accounts the owner can switch to and back. Fixture figures are always labelled, and never mixed with live ones.
+- **Access.** Sign-in through Cloudflare Access, and a lock so only the account's own agent instance can be reached.
+- **Checks.** Over 500 automated tests, format, lint, type check and build, run by CI on every pull request and push.
+- **Deploys.** One command per environment, with a smoke test that checks the deployed app against the account's data and the Worker's logs, and rolls production back if it fails. The record is in [spec/deployments.md](spec/deployments.md).
 
 Deploys run from a developer machine until a deploy token is added to GitHub.
 

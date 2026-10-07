@@ -230,3 +230,29 @@ describe("claims of submitting a credit request (UC-3)", () => {
     expect(rules(text)).toEqual([]);
   });
 });
+
+describe("claims of approving or closing a period (UC-6)", () => {
+  const rules = (text: string) =>
+    checkGrounding(input(text)).map((violation) => violation.rule);
+
+  it.each([
+    "I have approved the close.",
+    "I've closed the period for you.",
+    "I closed the September period.",
+    "I will finalize the close now.",
+    "I'll approve it.",
+    "I have now finalised the period."
+  ])("flags %j", (text) => {
+    expect(rules(text)).toEqual(["UC-6"]);
+  });
+
+  it.each([
+    "I started the close. It is waiting for your approval.",
+    "I cannot approve it; use the Approve button in the card.",
+    "The period is closed. Its figures are final.",
+    "You approved the close.",
+    "Only you can approve or reject the close."
+  ])("allows %j", (text) => {
+    expect(rules(text)).toEqual([]);
+  });
+});

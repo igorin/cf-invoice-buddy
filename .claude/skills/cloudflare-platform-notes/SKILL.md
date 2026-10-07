@@ -89,6 +89,16 @@ Neurons per million tokens, from the pricing page:
 - **Observed**: the starter needs `@ai-sdk/react` installed explicitly. Upgrading the stack through `npm install <pkg>` hit resolver conflicts; setting versions in `package.json` and reinstalling cleanly worked.
 - **Observed (2026-10-07)**: `agents` 0.26.0 pins `@modelcontextprotocol/sdk` and `client` versions with a published advisory, and `miniflare` pins an affected `sharp`. Neither parent had a fixed release; npm `overrides` cleared the audit with all tests passing.
 
+## Workflows
+
+- **Documented**: Workflows run on Workers Free. Limits there: 1,024 steps per instance, 100,000 executions a day shared with the Workers request limit, 100 concurrent running instances (waiting ones do not count), state of completed instances kept for 3 days, instance ids up to 100 characters matching `^[a-zA-Z0-9_][a-zA-Z0-9-_]*$`. Keep anything you need for longer in your own storage.
+- **Observed (2026-10-07, local test runtime)**: an `AgentWorkflow` started with `this.runWorkflow(binding, params, { id })` runs its `step.do` steps, calls the agent's public methods through `this.agent`, waits in `waitForApproval`, and resumes after `approveWorkflow` or throws after `rejectWorkflow`. The wrangler entry is `"workflows": [{ "name", "binding", "class_name" }]`, per environment, and the class must be exported from the Worker's entry file.
+- **Observed**: a rejection is recognised by `error.name === "WorkflowRejectedError"`; a timeout of the wait is a different error. The SDK also reports a rejection to the agent as a workflow error, so `onWorkflowError` runs after `rejectWorkflow`: do not let it overwrite a rejection.
+- **Observed**: instance ids are shared by every agent instance that uses the same Workflow, so an id built only from the agent's own data can collide. Use a random part.
+- **Observed**: `@callable()` methods declared on a base class are inherited by the agent class that extends it.
+- **Observed**: in tests, `introspectWorkflow(env.BINDING)` from `cloudflare:test` captures instances; `await introspector.get()` (it is asynchronous) returns them; `waitForStepResult({ name })` and `waitForStatus("complete")` wait; `modifyAll((m) => m.forceEventTimeout({ name: "wait-for-approval" }))` forces the approval wait to time out. Use `await using` so the introspector is disposed. A forced timeout logs an uncaught `WorkflowTimeoutError`; the test still passes.
+- **Documented**: `pauseWorkflow`, `resumeWorkflow`, `terminateWorkflow` and `restartWorkflow` do not work under local development.
+
 ## Durable Objects and storage
 
 - **Observed**: `ctx.storage.sql.exec` works as documented for a SQLite-backed agent. Keep migrations additive and idempotent (`CREATE TABLE IF NOT EXISTS`). SQLite has no `ADD COLUMN IF NOT EXISTS`, so a re-run of an `ALTER TABLE` migration fails; add a table instead.

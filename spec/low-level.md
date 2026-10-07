@@ -823,6 +823,35 @@ Phase 6 built credit request drafts (UC-3) and their history with owner-reported
 
 **Not verified against the real model.** No credit request turn has been run with Llama 3.3. The tests drive the tools directly and replay a scripted turn through the agent. Whether the model calls `draftCreditRequest` when asked for a credit, and whether its reply passes the response checker, will first be seen in an evaluation run.
 
+### Phase 7 implementation notes (2026-10-07)
+
+Phase 7 built the monthly invoice close (UC-6) as a Cloudflare Workflow with an owner approval gate. Where this differs from sections 4, 5, 8 and 9, this list is current.
+
+| Topic | What was built | Note |
+| --- | --- | --- |
+| Workflow | `InvoiceCloseWorkflow` in `src/workflows/invoice-close.ts`, an `AgentWorkflow`. Steps: `snapshot`, `rate`, `anomaly-check`, the approval wait of 7 days, then `finalize`, or `leave-open` when the owner rejects or nobody decides. | The workflow orders the steps and waits. Each step is one call to the agent's `closeStep`, which does the work on the agent's own database. Section 8 names three RPC targets; there is one, with the step as an argument. |
+| Idempotent steps (NFR-O1) | The snapshot is written once and kept if the step runs again. Every update leaves a closed row alone. A step for a workflow run that no longer owns the close does nothing. | Tested by running steps twice and by changing the period's data after the snapshot. |
+| Snapshot | The period's usage records, stored as JSON on the close's row. | Section 4 has a `usage_snapshots` table. One row holds a month's records comfortably, and a snapshot is never queried on its own. |
+| Storage | Migration 7: `invoice_closes`, one row per dataset and period, with the workflow id, state, snapshot, summary, approval time, the owner's reason and timestamps. | A close started again after a rejection, expiry or failure reuses the row; the audit log keeps the history. |
+| States | `snapshotted` (in progress), `awaiting_approval`, `closed`, `rejected`, `expired`, `failed`. | Only `closed` ends the period. The others leave it open, and a close can then be started again. |
+| Summary | `src/domain/close.ts`: the snapshot totalled per product, reconciled with the invoice, and run through the same detectors as a bill explanation. | A gap between invoice and usage is stated with its amount and direction. |
+| Starting | `startInvoiceClose` closes the month named or the last finished one. It refuses a period that has not ended, a period already closed, and a second close while one is in progress. | Both a callable and a model tool, as decided (Q3: on request in chat). |
+| Approval (NFR-S3) | `decideClose` is a callable reached only from the approval card. No tool approves, rejects or finalizes. `finalize` also refuses a close with no recorded approval, so a stray call cannot close a period. | Approval is recorded first, then the workflow finalizes. Rejection takes effect at once. |
+| Workflow ids | `close-<dataset>-<period start>-<random>`. | Section 8 has `close-<periodStart>`, which would let a close be started once ever and would collide between agent instances, since they share the Workflow. The one-close rule is enforced by the row's state instead. |
+| Data modes | Closes carry the dataset. A close in test mode closes no real period, is listed only in test mode and is labelled. | |
+| Agent structure | Credit request and invoice close methods, with the audit log, moved to a base class, `RecordsAgent` in `src/agent-records.ts`; `InvoiceBuddyAgent` extends it. | Keeps both files under 400 lines. No behaviour change for earlier phases. |
+| State | `state.pendingApprovals`: the closes waiting for a decision in the current data mode. | |
+| UI | `src/components/close-card.tsx`: an approval card above the chat for each pending close, with the line items, reconciliation, findings and Approve and Reject buttons with an optional reason; and a card for the results of the close tools. | Not yet viewed in a browser. |
+| Response checker | New rule, reported as UC-6: a reply that says in the first person that the assistant approved, closed or finalized something is withheld. | A phrase list; it will miss paraphrases. |
+| Configuration | A `workflows` entry in `wrangler.example.jsonc` at the top level and in each environment, with a different Workflow name in each: `invoice-close-local`, `invoice-close-staging`, `invoice-close`. | A local `wrangler.jsonc` made before this phase needs the same entries. |
+| Smoke test | An eleventh check, with no model call: in test mode a close is started for last month, must reach the approval gate within 60 seconds with a total and line items, is offered for approval, and is rejected; the period must then be open, and no test close may be listed with live data. | It always rejects, so every run can start a fresh close. Approval is covered by the integration tests, not on the deployed app. |
+| Tests | The integration tests run the real workflow in the local Workers runtime: to the gate, approved to closed, rejected, expired by a forced timeout, snapshot kept, guards. | |
+| Evaluations | One case added, thirteen in all: the owner asks the assistant to approve the close itself (grounding). | Not run. |
+
+**Free plan.** Workflows run on Workers Free. Completed instances are kept for 3 days there, which is why the close's result lives in the agent's database and not in the workflow.
+
+**Not verified.** No close has been started through the real model, and the approval card has not been viewed or clicked in a browser. The 7-day wait and survival across restarts rest on the platform's documented behaviour; only a forced timeout was tested.
+
 ### Checked against ECC skills
 
 | Skill | Applied as |
