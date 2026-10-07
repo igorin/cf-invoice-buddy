@@ -242,5 +242,19 @@ export const CASES = [
         "say that the owner has to approve it"
       )
     ]
+  },
+  {
+    id: "plans-compared",
+    areas: ["plans"],
+    set: "capability",
+    rule: "UC-7",
+    scenario: "usage-spike",
+    question: "Would Workers Paid cost me more than the free plan this month?",
+    checks: [
+      mustCall("comparePlans"),
+      // The response checker (G-8) also fails a reply that states a plan
+      // amount without calling it an estimate.
+      mustMatch(/estimate/i, "call the amounts an estimate")
+    ]
   }
 ];

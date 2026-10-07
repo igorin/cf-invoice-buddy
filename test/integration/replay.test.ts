@@ -211,6 +211,50 @@ describe("a credit request turn through the agent (UC-3)", () => {
   });
 });
 
+describe("a plan comparison turn through the agent (UC-7, G-8)", () => {
+  /** The paid plan's estimated total for the scenario, read ahead of the turn. */
+  async function paidTotal(name: string): Promise<string> {
+    const stub = await getAgentByName(env.InvoiceBuddyAgent, name);
+    return await runInDurableObject(stub, async (agent: InvoiceBuddyAgent) => {
+      await agent.setDataMode("test", "usage-spike");
+      return (await agent.comparePlans()).plans[1]?.total ?? "";
+    });
+  }
+
+  it("shows a reply that calls the plan amount an estimate", async () => {
+    const total = await paidTotal("replay-plans");
+    const result = await replay(
+      "replay-plans",
+      "usage-spike",
+      "Would Workers Paid be cheaper?",
+      () => [
+        toolCall("comparePlans"),
+        answer(
+          "On Workers Paid this usage is an estimate of ",
+          total,
+          ". This is TEST DATA."
+        )
+      ]
+    );
+    expect(result.tools).toEqual(["comparePlans"]);
+    expect(result.reply).toContain(total);
+  });
+
+  it("withholds a reply that states the plan amount as fact", async () => {
+    const total = await paidTotal("replay-plans-fact");
+    const result = await replay(
+      "replay-plans-fact",
+      "usage-spike",
+      "Would Workers Paid be cheaper?",
+      () => [
+        toolCall("comparePlans"),
+        answer("Workers Paid would cost ", total, ". This is TEST DATA.")
+      ]
+    );
+    expect(result.reply).toBe(UNVERIFIED_MESSAGE);
+  });
+});
+
 // Recordings of the real model, made by `npm run record` (spec section 10).
 const cassettes = Object.values(
   import.meta.glob<Cassette>("../cassettes/*.json", {

@@ -20,7 +20,7 @@ Last updated 2026-10-07. The build follows nine phases set out in [spec/low-leve
 | 5 | Documentation search and grounding checks, with each reply held until it is checked | Done |
 | 6 | Credit request drafts, history and owner-reported outcomes | Done |
 | 7 | Monthly invoice close, run as a Workflow with an owner approval gate | Done |
-| 8 | Plan comparison | Not started |
+| 8 | Plan comparison: an estimate of the month's usage on Workers Free and Workers Paid | Code complete; not yet deployed |
 | 9 | Release | Not started |
 
 What works today, in both deployed environments:

@@ -22,10 +22,12 @@ export type GroundingInput = Readonly<{
   allowedUrls: ReadonlyArray<string>;
   /** The outcome of explainBillChange this turn, if it was called. */
   explainOutcome: string | null;
+  /** True when a tool returned estimates this turn (a plan comparison). */
+  estimateRequired?: boolean;
 }>;
 
 export type Violation = Readonly<{
-  rule: "G-1" | "G-3" | "G-4" | "G-7" | "UC-3" | "UC-6";
+  rule: "G-1" | "G-3" | "G-4" | "G-7" | "G-8" | "UC-3" | "UC-6";
   detail: string;
 }>;
 
@@ -114,6 +116,9 @@ const SUBMISSION_CLAIM =
 const CLOSE_CLAIM =
   /\bI(?:['’]ve| have|['’]ll| will)?(?: now| already| just| also)? (?:approved?|finali[sz]ed?|closed?) (?:it|the|this|that|your)\b/i;
 
+const DOLLAR_AMOUNT = /\$[\d,]*\d/;
+const ESTIMATE_LABEL = /\bestimate[ds]?\b/i;
+
 export function checkGrounding(input: GroundingInput): Violation[] {
   const violations: Violation[] = [];
 
@@ -152,6 +157,18 @@ export function checkGrounding(input: GroundingInput): Violation[] {
     violations.push({
       rule: "UC-3",
       detail: `says the assistant submits requests: "${claim}"`
+    });
+  }
+
+  // A plan comparison is an estimate, and its amounts must be called one.
+  if (
+    input.estimateRequired === true &&
+    DOLLAR_AMOUNT.test(input.text) &&
+    !ESTIMATE_LABEL.test(input.text)
+  ) {
+    violations.push({
+      rule: "G-8",
+      detail: "plan amounts stated without calling them an estimate"
     });
   }
 

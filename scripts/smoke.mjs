@@ -442,6 +442,53 @@ await check(
 );
 
 await check(
+  "a plan comparison estimates the period's usage on both plans (UC-7, G-8)",
+  async () => {
+    expect(agent, "no agent session");
+    await agent.call("setDataMode", ["test", SPIKE_SCENARIO]);
+    try {
+      // No model call: the comparison is computed from stored usage.
+      const result = await agent.call("comparePlans");
+      expect(result.dataset === "test", `dataset is ${result.dataset}`);
+      expect(
+        result.estimate === true,
+        "the comparison is not marked as an estimate"
+      );
+      const [free, paid] = result.plans;
+      expect(
+        free?.plan === "free" && paid?.plan === "paid",
+        "the two plans are not both present"
+      );
+      expect(free.total === "$0.00", `Workers Free total is ${free.total}`);
+      expect(
+        free.overLimit.some((item) => item.service === "Workers"),
+        "the spike scenario does not show a free limit passed"
+      );
+      const total = Number(paid.total.replace(/[$,]/g, ""));
+      expect(
+        paid.base === "$5.00" && total > 5,
+        `Workers Paid is ${paid.total} with a base of ${paid.base}`
+      );
+      expect(
+        result.verdict.includes(paid.total),
+        "the verdict does not state the paid estimate"
+      );
+      expect(
+        result.priceSource.urls.every((url) =>
+          url.startsWith("https://developers.cloudflare.com/")
+        ),
+        "a price source is not Cloudflare's documentation"
+      );
+      console.log(
+        `  ${result.month}: Workers Free ${free.total} with ${free.overLimit.length} limit(s) passed; Workers Paid estimated at ${paid.total}`
+      );
+    } finally {
+      await agent.call("setDataMode", ["live"]);
+    }
+  }
+);
+
+await check(
   "documentation search returns Cloudflare pages (G-2, G-7)",
   async () => {
     expect(agent, "no agent session");

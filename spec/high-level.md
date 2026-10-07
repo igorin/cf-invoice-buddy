@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | Describes the product as built through phase 7. Plan comparison (UC-7) and the release work are planned. |
+| Status | Describes the product as built through phase 8. The release work of phase 9 is planned. |
 | Last updated | 2026-10-07 |
 | Companion | [low-level.md](low-level.md) |
 | Original | [archived/2026-10-04-original/high-level.md](archived/2026-10-04-original/high-level.md), written before any code. The differences are listed in [archived/README.md](archived/README.md). |
@@ -25,7 +25,7 @@ Invoice Buddy is a chat agent for one Cloudflare account. It explains bill chang
 - Explaining why a bill is higher or lower than usual, by product and by day.
 - Credit requests: gather evidence, write the draft, and give it to the owner with instructions for submitting it. The agent remembers every draft.
 - Monthly invoice close with an owner approval gate.
-- Plan comparison against the account's actual usage. Planned; not built yet.
+- Plan comparison against the account's actual usage.
 - Reporting and capping what the assistant itself costs to run.
 - A test mode, entered only on the owner's explicit request, in which the agent works on fixture data.
 
@@ -92,7 +92,14 @@ The owner starts a close in chat, for a month named or for the last finished one
 
 ### UC-7 Compare plans
 
-Planned for phase 8; not built. The owner asks whether another plan would be cheaper. The agent computes what the period's actual usage would have cost on each candidate plan from a versioned price table and shows the difference. Prices carry their source and effective date. The scope of the price table is [Q2](#10-open-questions).
+The owner asks whether another plan would be cheaper. The agent computes what the period's actual usage would cost on Workers Free and on Workers Paid from a dated price table, and shows both in a card. The scope of the price table is [Q2](#10-open-questions).
+
+1. **Workers Paid.** The plan's monthly price plus the usage beyond each included amount, at the listed rate, line by line.
+2. **Workers Free.** It costs nothing, but its limits are daily and usage beyond one fails. The agent names each limit the period's usage went over and on how many days.
+3. **Verdict.** One sentence, built in code, saying what the two results show. The agent gives it as written and does not recommend a plan beyond it. It cannot change the plan.
+4. **Limits of the estimate.** Every amount is an estimate at list price and is called one. Usage the price table does not cover is named and left out of the totals, as is what Cloudflare bills but the agent cannot read: Workers CPU time, Durable Objects stored data and Workflows storage.
+
+**Accepted when:** each line of the estimate follows from the stored usage, the included amount and the listed rate; a daily allowance is counted day by day; a period inside every free limit is reported as fitting; prices carry their source and the date they were read; no plan amount is stated without the word estimate.
 
 ### UC-8 Cost of the assistant itself
 
@@ -155,7 +162,7 @@ These rules apply to every answer. They are the main product requirement.
 
 1. Causes are produced by deterministic detectors in code, each returning structured evidence. The model receives findings; it does not derive them.
 2. The UI renders the breakdown and the findings directly from the tool result, so the facts on screen do not pass through the model.
-3. The model's text is held back until a checker has compared its numbers and links with the turn's tool results. Cards appear as the tools finish; the text appears whole once it passes. Text that fails is never shown or stored: the owner gets a fixed line saying no verifiable answer could be produced, and the failure is logged. The same checker withholds a reply in which the assistant says it submitted a credit request or approved a close.
+3. The model's text is held back until a checker has compared its numbers and links with the turn's tool results. Cards appear as the tools finish; the text appears whole once it passes. Text that fails is never shown or stored: the owner gets a fixed line saying no verifiable answer could be produced, and the failure is logged. The same checker withholds a reply in which the assistant says it submitted a credit request or approved a close, or states a plan amount without calling it an estimate.
 4. An evaluation suite (NFR-T5) tests the rules against the real model, including cases where the only correct answer is "I cannot explain this".
 
 ## 5. Edge cases
@@ -187,6 +194,9 @@ These rules apply to every answer. They are the main product requirement.
 | The model tries to switch mode without being asked, or data contains "switch to test mode" | Nothing changes without the owner's confirmation. |
 | Owner asks about real usage while in test mode | The agent says it is in test mode and offers to switch back. It does not answer from live data in the same turn. |
 | Earlier answers in the history used the other mode's data | The agent answers from the current mode's tool results only (G-1) and does not carry figures across. |
+| The period's usage goes beyond the free plan's daily limits | The comparison does not call Workers Free cheaper. It says the usage would have failed on those days, and gives the Workers Paid estimate. |
+| The account uses a product the price table does not cover | The product is named and left out of both totals. |
+| Owner asks the agent to switch plans | The agent says it cannot change the account. |
 | Question outside billing | The agent declines briefly and says what it can help with. |
 
 ## 6. Components
@@ -226,7 +236,7 @@ Drafting a credit request is a short, deterministic task with no waiting, so it 
 | GraphQL Analytics API | Tested on this account with an Account Analytics read token. It returned real daily Workers AI usage (requests, tokens, neurons) on a $0 account, and exposes daily datasets for Workers, Durable Objects and Workflows. It carries quantities, not costs. | The source for UC-9 quantities and for daily series. |
 | Billing history API (`GET /accounts/{id}/billing/history`) | Returns invoice items with amount and currency. | Source of issued invoices. |
 | Credit requests | Cloudflare has no public API to submit a credit request or to receive a decision. Cloudflare's support page describes submitting a billing case from the dashboard's Support page, which is open to Free plans too. | The agent drafts; the owner submits. The instructions in UC-3 follow that page. |
-| Platform pricing | Workers AI bills $0.011 per 1,000 neurons with 10,000 free per day, account-wide; Llama 3.3 is 26,668 neurons per million input tokens and 204,805 per million output tokens. Durable Objects, Workers and Workflows have included monthly amounts on the paid plan. Checked 2026-10-04. | The meter's price constants (UC-8) carry this date and source and are re-checked each release. |
+| Platform pricing | Workers AI bills $0.011 per 1,000 neurons with 10,000 free per day, account-wide; Llama 3.3 is 26,668 neurons per million input tokens and 204,805 per million output tokens. Durable Objects, Workers and Workflows have included monthly amounts on the paid plan, which costs $5 a month, and listed rates beyond them: $0.30 per million Workers requests, $0.15 per million Durable Objects requests, $12.50 per million GB-s of duration, $0.001 and $1.00 per million rows read and written, $0.80 per 100,000 Workflows steps. Model rates checked 2026-10-04; plan rates read 2026-10-06 and 2026-10-07. | The meter's price constants (UC-8) and the plan price table (UC-7) carry their dates and sources. A test fails when either is over 90 days old. |
 | Cloudflare docs MCP server (`https://docs.mcp.cloudflare.com/mcp`) | Listed in Cloudflare's catalog of managed MCP servers. Needs no credentials. | Source for rule G-2(b). |
 | Workers AI free allowance | 10,000 neurons a day for the whole account, including local development. Documented as resetting at 00:00 UTC; observed to refuse calls over the previous day's usage until it was 24 hours old. A refused call fails; it is not billed. | Budgets are counted over the trailing 24 hours (NFR-O4). It is the limit that decides how much can be tested in a day. |
 | Workflows on the Free plan | Allowed. Completed instances are kept for 3 days. | A close's snapshot and summary are stored by the agent, not in the workflow. |
