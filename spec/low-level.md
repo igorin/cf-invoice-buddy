@@ -850,7 +850,9 @@ Phase 7 built the monthly invoice close (UC-6) as a Cloudflare Workflow with an 
 
 **Free plan.** Workflows run on Workers Free. Completed instances are kept for 3 days there, which is why the close's result lives in the agent's database and not in the workflow.
 
-**Not verified.** No close has been started through the real model, and the approval card has not been viewed or clicked in a browser. The 7-day wait and survival across restarts rest on the platform's documented behaviour; only a forced timeout was tested.
+**Deployed 2026-10-07** at commit `88e9c6e`: staging and production both pass 11 of 11 smoke checks, and the `deployed/phase-7` tag is on that commit. The deploy created the Workflows `invoice-close-staging` and `invoice-close`. In each environment the smoke test started a close of 2026-09 on test data; the Workflow ran its three steps on Cloudflare, called back into the agent, reached the approval gate with a total of $150.00, and ended with the period open after the rejection. The first model turn with the two close tools in the tool list still called the right tool and passed the checker.
+
+**Not verified.** An approval has not been made on the deployed app; the smoke test only rejects. No close has been started through the real model, and the approval card has not been viewed or clicked in a browser. The 7-day wait and survival across restarts rest on the platform's documented behaviour; only a forced timeout was tested.
 
 ### Checked against ECC skills
 
