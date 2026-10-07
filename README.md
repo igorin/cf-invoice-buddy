@@ -9,7 +9,7 @@ What the project has learned about Cloudflare's platform, from Workers AI limits
 
 Last updated 2026-10-07. The build follows nine phases set out in [spec/low-level.md](spec/low-level.md), section 15. Each phase must be deployed to Cloudflare and pass a smoke test before the next begins.
 
-**Phases 1 to 7 of 9 are done.** A phase is done when it runs in staging and production behind Cloudflare Access and both environments pass the smoke test. Full test run takes a significant amount of daily neurons and production deployments with full end to end test pass can be done ~1 a day.
+**Phases 1 to 8 of 9 are done.** A phase is done when it runs in staging and production behind Cloudflare Access and both environments pass the smoke test. Full test run takes a significant amount of daily neurons and production deployments with full end to end test pass can be done ~1 a day.
 
 | Phase | Scope | Status |
 | --- | --- | --- |
@@ -20,7 +20,7 @@ Last updated 2026-10-07. The build follows nine phases set out in [spec/low-leve
 | 5 | Documentation search and grounding checks, with each reply held until it is checked | Done |
 | 6 | Credit request drafts, history and owner-reported outcomes | Done |
 | 7 | Monthly invoice close, run as a Workflow with an owner approval gate | Done |
-| 8 | Plan comparison: an estimate of the month's usage on Workers Free and Workers Paid | Code complete; not yet deployed |
+| 8 | Plan comparison: an estimate of the month's usage on Workers Free and Workers Paid | Done |
 | 9 | Release | Not started |
 
 What works today, in both deployed environments:
@@ -30,6 +30,7 @@ What works today, in both deployed environments:
 - **Bill explanations.** A month's bill against a baseline, per product and per day, with causes stated only when a detector found them in the account's data or a Cloudflare documentation page describes them. When neither holds, the agent says it cannot explain the difference.
 - **Credit requests.** A draft built from the account's data with a fixed template, with the steps for submitting it yourself. The agent submits nothing. Drafts are kept, and what you report about them is stored as your report.
 - **Invoice close.** A Cloudflare Workflow freezes a finished month's usage, totals it per product, reconciles it with the invoice, checks it for anomalies, and waits for your decision. Only the Approve and Reject buttons in the approval card decide; the model cannot. A closed month is final.
+- **Plan comparison.** An estimate of what a month's actual usage would cost on Workers Free and on Workers Paid, from Cloudflare's list prices. It names the free plan's daily limits the usage went over, and what the estimate leaves out.
 - **The assistant's own cost.** A meter of its model usage, a daily budget, and a cost report.
 - **Test mode.** Five fixture accounts the owner can switch to and back. Fixture figures are always labelled, and never mixed with live ones.
 - **Access.** Sign-in through Cloudflare Access, and a lock so only the account's own agent instance can be reached.

@@ -956,7 +956,7 @@ Each phase is test-first. A phase is done only when `check` and `test:coverage` 
 | 5 | **Grounding.** Documentation search, the response checker, held replies, the evaluation suite and its first run. | Done 2026-10-07 |
 | 6 | **Credit requests.** Draft template, the three credit tools, the credit card, history and owner-reported outcomes. UC-3, UC-4. | Done 2026-10-07 |
 | 7 | **Invoice close.** The workflow, the close tools and the approval card. UC-6. | Done 2026-10-07 |
-| 8 | **Plans.** Price table, `comparePlans`, the plan card and the estimate rule in the checker. UC-7. | Code complete; not yet deployed |
+| 8 | **Plans.** Price table, `comparePlans`, the plan card and the estimate rule in the checker. UC-7. | Done 2026-10-07 |
 | 9 | **Release.** Browser tests on staging, a clean run of the whole evaluation suite, an accessibility pass, price constants re-checked. | Not started |
 
-Owed before release, from the phases above: a clean evaluation run; a look at the UI in a browser, including an approval of a close; recordings of the real model for the replay tests; and the per-record charges of a paid account (section 4).
+Owed before release, from the phases above: a clean evaluation run, which would also be the first time a credit request, a close or a plan comparison is asked of the real model; a look at the UI in a browser, including an approval of a close; recordings of the real model for the replay tests; and the per-record charges of a paid account (section 4).

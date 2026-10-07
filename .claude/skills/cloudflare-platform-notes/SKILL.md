@@ -171,6 +171,7 @@ Neurons per million tokens, from the pricing page:
 - **Observed**: rolling back a Worker version does not roll back Durable Object storage. A schema change must stay compatible with the previous version. The rollback drills are in `spec/deployments.md`.
 - **Observed**: `wrangler types env.d.ts` generates binding types from the local config. Run it after changing bindings or vars.
 - **Observed**: `npx wrangler deploy --dry-run` needs no login and is safe in CI.
+- **Observed (2026-10-07)**: `wrangler deploy` checks each Workflow through the API before it uploads. That call once failed with "Authentication error [code: 10000]" while the login was valid: `wrangler whoami` and `wrangler workflows list` worked straight after, and the same deploy succeeded on a retry. Nothing had been uploaded. Check the login with a read-only command before assuming it has expired.
 - **Documented**: the docs now prefer a declarative `exports` field over the `migrations` array for Durable Objects in new Workers; both are supported.
 - **Observed**: Workers Free ran every turn this app makes, including turns with tool calls; peak CPU on a smoke run was 161 to 266 ms.
 - This project has a Wrangler configuration (`wrangler.jsonc`, git-ignored, copied from `wrangler.example.jsonc`), so use `wrangler` for it, not the `cf` CLI.
