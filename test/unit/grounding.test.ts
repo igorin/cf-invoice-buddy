@@ -256,3 +256,31 @@ describe("claims of approving or closing a period (UC-6)", () => {
     expect(rules(text)).toEqual([]);
   });
 });
+
+describe("plan amounts must be called estimates (G-8)", () => {
+  const plans = {
+    verdict: "On Workers Paid the same usage is estimated at $38.00.",
+    total: "$38.00"
+  };
+  const rules = (text: string, estimateRequired = true) =>
+    checkGrounding(input(text, { toolResults: [plans], estimateRequired })).map(
+      (violation) => violation.rule
+    );
+
+  it("flags a plan amount stated as fact", () => {
+    expect(rules("Workers Paid would cost $38.00.")).toEqual(["G-8"]);
+  });
+
+  it.each([
+    "Workers Paid is estimated at $38.00.",
+    "As an estimate, Workers Paid would cost $38.00.",
+    "These are estimates: $38.00 on Workers Paid."
+  ])("allows %j", (text) => {
+    expect(rules(text)).toEqual([]);
+  });
+
+  it("does not ask for the label when no amount is stated, or no estimate was returned", () => {
+    expect(rules("Your usage fits inside the free plan's limits.")).toEqual([]);
+    expect(rules("Workers Paid would cost $38.00.", false)).toEqual([]);
+  });
+});

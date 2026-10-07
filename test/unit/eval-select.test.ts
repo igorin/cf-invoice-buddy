@@ -81,7 +81,8 @@ describe("selectCases: which evaluation cases a change calls for", () => {
       "docs",
       "cost",
       "credit",
-      "close"
+      "close",
+      "plans"
     ]);
     for (const item of CASES) {
       expect(item.areas.length, item.id).toBeGreaterThan(0);

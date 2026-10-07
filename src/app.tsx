@@ -6,6 +6,7 @@ import type { AgentState, InvoiceBuddyAgent } from "./agent";
 import { BreakdownCard, CostFooter } from "./components/breakdown-card";
 import { ApprovalCards, CloseCard, hasClose } from "./components/close-card";
 import { CreditCard, hasCreditDraft } from "./components/credit-card";
+import { PlanCard, hasPlanComparison } from "./components/plan-card";
 import {
   DataModeSwitch,
   TestModeBanner,
@@ -163,6 +164,19 @@ function ToolPartView({
     return (
       <div className="flex justify-start">
         <CloseCard output={part.output} />
+      </div>
+    );
+  }
+
+  // A plan comparison is shown as a card (UC-7).
+  if (
+    part.state === "output-available" &&
+    toolName === "comparePlans" &&
+    hasPlanComparison(part.output)
+  ) {
+    return (
+      <div className="flex justify-start">
+        <PlanCard output={part.output} />
       </div>
     );
   }

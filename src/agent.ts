@@ -46,6 +46,10 @@ import {
   hasVisibleReply,
   isLooping
 } from "./services/turn-guard";
+import {
+  comparePlansFor,
+  type PlanComparisonView
+} from "./services/plan-service";
 import { readUsageSummaryView } from "./services/usage-summary-service";
 import { fetchClosedMonth, syncCurrentPeriod } from "./services/usage-sync";
 import {
@@ -268,6 +272,24 @@ export class InvoiceBuddyAgent extends RecordsAgent {
       anchorDay: LIVE_ANCHOR_DAY,
       ensurePeriod: (period) => this.ensurePeriod(mode.dataset, period, today)
     });
+  }
+
+  /** Estimates a month's usage on each plan (UC-7). See plan-service.ts. */
+  @callable()
+  async comparePlans(month?: unknown): Promise<PlanComparisonView> {
+    const mode = this.state.dataMode;
+    const today = this.today();
+    return comparePlansFor(
+      typeof month === "string" ? month.trim() : undefined,
+      {
+        sql: this.ctx.storage.sql,
+        dataset: mode.dataset,
+        scenario: mode.dataset === "test" ? mode.scenario : null,
+        today,
+        anchorDay: LIVE_ANCHOR_DAY,
+        ensurePeriod: (period) => this.ensurePeriod(mode.dataset, period, today)
+      }
+    );
   }
 
   /** What the assistant itself has cost (UC-8). Always real, in either mode. */

@@ -46,6 +46,26 @@ Neurons per million tokens, from the pricing page:
 - **Observed**: most of a turn's input tokens are tool results, not the system prompt. Cutting 40% of the prompt and tool descriptions saved about 350 tokens, 9 neurons, a step.
 - **Open**: whether the 8B model calls tools reliably. Not tried.
 
+## Workers Paid list prices
+
+- **Documented (read 2026-10-07)**: Workers Paid is $5 a month. Beyond the included amounts, per month unless stated:
+
+  | Metric | Included | Rate beyond |
+  | --- | --- | --- |
+  | Workers requests | 10 million | $0.30 per million |
+  | Workers CPU time | 30 million ms | $0.02 per million ms |
+  | Durable Objects requests | 1 million | $0.15 per million |
+  | Durable Objects duration | 400,000 GB-s | $12.50 per million GB-s |
+  | Durable Objects SQLite rows read | 25 billion | $0.001 per million |
+  | Durable Objects SQLite rows written | 50 million | $1.00 per million |
+  | Durable Objects stored data | 5 GB-month | $0.20 per GB-month |
+  | Workflows steps | 500,000 | $0.80 per 100,000 |
+  | Workflows storage | 1 GB-month | $0.20 per GB-month |
+  | Workers AI neurons | 10,000 a day | $0.011 per 1,000 |
+
+- **Documented**: Workers Free limits are daily, reset at 00:00 UTC, and usage beyond one fails; it is not billed. Free: 100,000 Workers requests, 100,000 Durable Objects requests, 13,000 GB-s, 5 million rows read, 100,000 rows written and 3,000 Workflows steps a day. Workflows requests and CPU time are shared with Workers.
+- **Observed**: the GraphQL Analytics datasets this project reads give requests, neurons, duration, rows and steps. They do not give Workers CPU time or stored data, so an estimate built from them leaves those out.
+
 ## Workers AI: Llama 3.3 and its stream
 
 - **Documented**: `@cf/meta/llama-3.3-70b-instruct-fp8-fast` supports function calling and has a 24,000-token context window. Keep turns short and prune old tool results.

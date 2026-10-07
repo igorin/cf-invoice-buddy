@@ -22,6 +22,7 @@ export const ALLOWED_URLS = [
 
 const DOCS_TOOL = "searchCloudflareDocs";
 const EXPLAIN_TOOL = "explainBillChange";
+const PLANS_TOOL = "comparePlans";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -54,6 +55,7 @@ export function reviewTurn(
       .filter((tool) => tool.name === DOCS_TOOL)
       .flatMap((tool) => docsUrlsIn(tool.output)),
     allowedUrls: ALLOWED_URLS,
+    estimateRequired: turn.tools.some((tool) => tool.name === PLANS_TOOL),
     explainOutcome:
       isRecord(explain) && typeof explain.outcome === "string"
         ? explain.outcome
