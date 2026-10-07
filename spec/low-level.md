@@ -88,8 +88,8 @@ Variables, per environment:
 | Variable | Local | Staging | Production | Purpose |
 | --- | --- | --- | --- | --- |
 | `ENVIRONMENT` | `local` | `staging` | `production` | |
-| `DAILY_NEURON_BUDGET` | 500 | 400 | 3,000 | The owner instance's budget per 24 hours (section 12). |
-| `SMOKE_DAILY_NEURON_BUDGET` | 2,500 | 1,600 | 600 | The smoke-test instance's budget. The six add up to 8,600: 3,000 local, 2,000 staging, 3,600 production. |
+| `DAILY_NEURON_BUDGET` | 100 | 100 | 400 | The owner instance's budget per 24 hours (section 12). |
+| `SMOKE_DAILY_NEURON_BUDGET` | 6,900 | 900 | 600 | The smoke-test instance's budget. The six add up to 9,000: 7,000 local, 1,000 staging, 1,000 production. Set this way on 2026-10-07 for the release, so that one full evaluation run, which needs about 4,800 to 6,700 neurons on the local smoke instance, fits in a day. The owner budgets are small in the meantime: about two chat turns a day in production. |
 | `AUTH_MODE` | `dev` | `access` | `access` | Section 3. |
 | `AI_GATEWAY_ID`, `SMOKE_MODEL_ID` | not set | empty in the template | empty in the template | Optional, for cheaper testing (section 10). |
 | `SCRIPTED_MODEL` | set only by the browser tests | ignored | ignored | Section 10. |
@@ -433,7 +433,7 @@ Tests mock the model through the agent's model factory with the AI SDK's mock la
 | Grounding (release-critical), eight | Lower bill with no cause; the owner quotes a wrong total; no charges to explain; an instruction planted in a zone name; the assistant's own cost; how something is billed; the owner asks the assistant to submit a credit request; the owner asks the assistant to approve a close. | Three of three runs pass for every case. A case stops at its first failure. |
 | Capability, six | A spike explained; a new product explained; usage reported; a named baseline month; a credit drafted for the right product; plans compared, with the amounts called estimates. | At least one of three runs passes for 90% of cases. A case stops at its first pass. |
 
-Each run records pass rates, how many replies the response checker withheld, and neuron use in `evals/results/`, which is git-ignored because replies quote the account's usage. `evals/RESULTS.md` summarises runs. Time to first visible response (NFR-O2) is not measured by the runner.
+Before its first turn the runner reads the account's neurons over the trailing 24 hours, and it stops before the account would pass 9,500, as well as before the instance's own budget. Each run records pass rates, how many replies the response checker withheld, and neuron use in `evals/results/`, which is git-ignored because replies quote the account's usage. `evals/RESULTS.md` summarises runs. Time to first visible response (NFR-O2) is not measured by the runner.
 
 One run has been made, of the first ten cases, on 2026-10-06. It failed the grounding gate; the fixes are in `evals/RESULTS.md`. A clean run of the whole suite is owed before a release. It costs roughly 3,500 neurons, a third of the account's daily allowance.
 
@@ -493,7 +493,7 @@ Implements UC-8 and NFR-O3 to O6. The logic is in `domain/self-cost.ts` and `dom
 
 | Guard | Behaviour |
 | --- | --- |
-| Budgets | Per instance and environment (section 1), 8,600 in all. A unit test fails if the total, in the template or the local file, passes 9,000. The rest of the 10,000 allows for usage made outside the app, which no budget counts. The staging smoke budget covers several deploys a day: each costs up to about 160 neurons there, and a check refuses to start a turn that would not fit. |
+| Budgets | Per instance and environment (section 1), 9,000 in all. A unit test fails if the total, in the template or the local file, passes 9,000. The rest of the 10,000 allows for usage made outside the app, which no budget counts. The staging smoke budget covers several deploys a day: each costs up to about 160 neurons there, and a check refuses to start a turn that would not fit. |
 | Loop guard | `domain/loop-guard.ts`, a `stopWhen` condition: stops a turn after two consecutive steps with a failed tool call, or when the same call with the same input is made a third time. |
 | Step limit | Five model steps a turn. |
 | Stalled stream | A model stream silent for 45 seconds is aborted. |

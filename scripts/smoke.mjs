@@ -7,7 +7,14 @@
 // smoke runs never write into the owner's own conversation.
 import { spawn } from "node:child_process";
 import { openAgent } from "./agent-client.mjs";
-import { ENVIRONMENTS, WORKER_NAMES, fail, readEnvFile } from "./lib.mjs";
+import {
+  ENVIRONMENTS,
+  WINDOW_HOURS,
+  WORKER_NAMES,
+  accountNeuronsLast24Hours,
+  fail,
+  readEnvFile
+} from "./lib.mjs";
 
 const [environment, expectedSha] = process.argv.slice(2);
 if (!ENVIRONMENTS.includes(environment) || !expectedSha) {
@@ -43,7 +50,6 @@ const DOLLAR_AMOUNT = /-?\$[\d,]+(?:\.\d+)?/g;
 // uses a few hundred; it makes one model turn and is refused when the account or the smoke instance
 // does not clearly have room, so a faulty run can never eat the allowance.
 const ACCOUNT_DAILY_NEURON_LIMIT = 10_000;
-const WINDOW_HOURS = 24;
 const ACCOUNT_NEURON_RESERVE = 2_000;
 const RUN_NEURON_ESTIMATE = 250;
 // How long a Workflow may take to reach, or leave, the approval gate.
@@ -132,41 +138,6 @@ async function followLogs() {
     tail.kill();
     return parseJsonStream(output);
   };
-}
-
-/**
- * The account's Workers AI neurons over the trailing 24 hours, from GraphQL
- * Analytics. Cloudflare documents a limit that resets at 00:00 UTC, but on
- * 2026-10-06 it refused calls over usage made the day before, so the check
- * uses the trailing 24 hours, which is never looser than the calendar day.
- */
-async function accountNeuronsLast24Hours() {
-  const credentials = { ...readEnvFile(".dev.vars"), ...process.env };
-  const now = new Date();
-  const since = new Date(now.getTime() - WINDOW_HOURS * 3_600_000);
-  const response = await fetch("https://api.cloudflare.com/client/v4/graphql", {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${credentials.CF_API_TOKEN}`,
-      "content-type": "application/json"
-    },
-    body: JSON.stringify({
-      query: `query($account: String!, $since: Time!, $until: Time!) { viewer { accounts(filter: { accountTag: $account }) {
-        rows: aiInferenceAdaptiveGroups(limit: 1000, filter: { datetime_geq: $since, datetime_leq: $until }) { sum { totalNeurons } }
-      } } }`,
-      variables: {
-        account: credentials.CF_ACCOUNT_ID,
-        since: since.toISOString(),
-        until: now.toISOString()
-      }
-    })
-  });
-  const body = await response.json();
-  const rows = body.data?.viewer?.accounts?.[0]?.rows;
-  if (!response.ok || !Array.isArray(rows)) {
-    throw new Error("the account's neuron usage could not be read");
-  }
-  return rows.reduce((total, row) => total + (row.sum?.totalNeurons ?? 0), 0);
 }
 
 try {

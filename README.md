@@ -174,7 +174,7 @@ Local development reaches the real model through the production Worker's hostnam
 
 ### Staying inside the free tier
 
-The app runs on Cloudflare's free plan, where Workers AI allows 10,000 neurons a day for the whole account. Each agent instance has a budget in `wrangler.jsonc` (and in the template, `wrangler.example.jsonc`), counted over the trailing 24 hours; together they add up to 8,600, and a test fails if that total is raised past 9,000. Cloudflare documents a reset at 00:00 UTC, but it has refused calls over usage from the previous day, so the app counts the trailing 24 hours to be safe. A chat turn that goes in circles is stopped, and the smoke test, which makes one model turn per run, will not run if it would take the account past 8,000 neurons in the trailing 24 hours.
+The app runs on Cloudflare's free plan, where Workers AI allows 10,000 neurons a day for the whole account. Each agent instance has a budget in `wrangler.jsonc` (and in the template, `wrangler.example.jsonc`), counted over the trailing 24 hours; together they add up to 9,000, and a test fails if that total is raised past it. Cloudflare documents a reset at 00:00 UTC, but it has refused calls over usage from the previous day, so the app counts the trailing 24 hours to be safe. A chat turn that goes in circles is stopped, and the smoke test, which makes one model turn per run, will not run if it would take the account past 8,000 neurons in the trailing 24 hours.
 
 ## Deploying
 
