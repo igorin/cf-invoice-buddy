@@ -16,7 +16,7 @@ const NO_EFFECT: ReadonlyArray<RegExp> = [
   /\.css$/,
   /^src\/components\//,
   /^src\/(app|client)\.tsx$/,
-  /^scripts\/(deploy|smoke|check-phase-gate|lib)\.mjs$/,
+  /^scripts\/(deploy|smoke|record|check-phase-gate|lib)\.mjs$/,
   /^\.(phase|gitignore)$/
 ];
 

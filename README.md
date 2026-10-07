@@ -119,6 +119,7 @@ Wrangler is Cloudflare's command-line tool. It is installed with the project's o
    | `name` at the top and under `env.staging` and `env.production` | The Worker names, which become the `workers.dev` hostnames. If you change them, change `WORKER_NAMES` in `scripts/lib.mjs` to match. |
    | `DAILY_NEURON_BUDGET`, `SMOKE_DAILY_NEURON_BUDGET` | The model budget of each environment. The six values must add up to no more than 9,000; a test checks this. |
    | `compatibility_date` | Only when upgrading the Workers runtime. |
+   | `AI_GATEWAY_ID`, `SMOKE_MODEL_ID` | Optional and empty by default. They make the smoke test cheaper; see spec/low-level.md, section 10. `AI_GATEWAY_ID` is the name of an AI Gateway you have created in your account with caching on. |
 
    Do not put secrets in this file. They go in `.dev.vars` for local development and in `.secrets/` for deployed environments, both described in this README.
 
@@ -140,6 +141,7 @@ npm run check          # format, lint, type check
 npm run test:coverage  # unit and integration tests with coverage thresholds
 npm run eval           # whole evaluation suite against the real model; needs `npm run dev` running
 npm run eval -- --changed   # only the cases affected by changes since origin/main
+npm run record         # record the real model's answers for the replay tests; see spec/low-level.md, section 10
 ```
 
 Local development reaches the real model through the production Worker's hostname, which Cloudflare Access protects. Run `npm run dev` in a terminal and sign in when the browser prompt appears, or set `CLOUDFLARE_ACCESS_CLIENT_ID` and `CLOUDFLARE_ACCESS_CLIENT_SECRET` to an Access service token for non-interactive use.

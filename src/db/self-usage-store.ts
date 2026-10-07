@@ -121,7 +121,8 @@ export function recordTurn(
       : {
           inputTokens: usage.inputTokens,
           outputTokens: usage.outputTokens ?? 0
-        }
+        },
+    model
   );
   const at = new Date().toISOString();
   if (turn.metered) {

@@ -385,6 +385,18 @@ Each eval run records pass rates, how many replies the response checker withheld
 
 A partial run is labelled as such in its output and its result file (`scope`), and does not count for a release. A release needs a complete run of the whole suite (`npm run eval`).
 
+### Cheaper testing (experiment, branch `experiment/cheaper-testing`)
+
+Workers AI has no local mode: every model call, including local development, draws on the account's 10,000 free neurons a day. Three measures reduce what testing takes from that. All three are off unless configured, and none reaches an owner's instance: they apply to the smoke-test instance only.
+
+| Measure | How | Setting |
+| --- | --- | --- |
+| Replay tests | `npm run record` asks the real model each evaluation case that runs on test data and saves the model's raw stream, as the binding returned it, to `test/cassettes/<case>.json`. `test/integration/replay.test.ts` plays each one back through the real agent, stream handling, tools and response checker, with the clock set to the recording day, and expects the same reply and tool calls. No model call. | `RECORD_MODEL_CALLS=1` in `.dev.vars`, local only. |
+| Cached gateway | The deployed smoke-test instance calls the model through an AI Gateway with caching on, so a smoke turn identical to an earlier one within the cache time is served from the cache. Never used locally, where evaluations repeat a question on purpose. | `AI_GATEWAY_ID`, `SMOKE_CACHE_TTL_SECONDS` (default 3,600). |
+| Cheaper model | The smoke-test instance may use `@cf/meta/llama-3.1-8b-instruct-fp8-fast`, about a sixth of the chat model's token rates. It proves the pipeline works and says nothing about the chat model. Turns are metered at the rates of the model that ran them. | `SMOKE_MODEL_ID`. |
+
+Rules for recordings: only cases on test data are recorded, since the repository is public; the script refuses to save a recording containing the account ID, the API token or the Access domain; a recording must replay to the same reply (`npm test`) before it is committed; `npm run record -- --status` lists recordings made before the prompt or a tool changed. A replay test shows that the code still handles what the model said then. It does not show what the model would say now, so the evaluation suite is still required before a release.
+
 ### CI
 
 GitHub Actions on every pull request: the phase gate (section 13), `npm ci`, `npm run check`, `npm run test:coverage`, a staging build, `wrangler deploy --dry-run`, `npm audit --audit-level=high`. End-to-end tests run on pull requests to `main`. Evals run on demand and before a release, since they call a paid model.
@@ -730,6 +742,25 @@ Built after the first evaluation run showed the model stating a figure and a lin
 
 **Not verified against the real model.** None of this has been run with Llama 3.3: the account's model allowance was exhausted, and no model call was made for this change. The tests use a scripted model. Three things are therefore unknown until the next evaluation run: whether the shorter prompt changes the model's behaviour, how often replies are withheld, and the real neuron saving. The change to the prompt touches every case, so that run must be the whole suite.
 
+### Cheaper testing experiment (2026-10-06)
+
+On branch `experiment/cheaper-testing`, not merged. Prompted by research into testing within the free plan: Cloudflare's documentation says the AI binding always runs remotely and is charged in local development, and offers AI Gateway caching for identical requests; general practice for LLM applications adds a replay tier between scripted-model tests and live evaluations.
+
+| Item | What was built | Notes |
+| --- | --- | --- |
+| Record and replay | `src/domain/model-recording.ts` (`withRecording`, `replayBinding`), the `takeRecordedCalls` callable, `scripts/record.mjs`, `test/integration/replay.test.ts`. | The replay tests pass with two hand-built recordings in the stream shape observed from Llama 3.3 (text and tool calls carried twice). No recording of the real model exists yet. |
+| Model selection | `chooseModel` in `src/model.ts`; rates per model in `src/domain/models.ts`; `modelFactory` takes whether the instance is the smoke-test one. | An invalid configuration falls back to the chat model, called directly. A model without listed rates cannot be configured. |
+| Clock | `InvoiceBuddyAgent.clock`, so a replay runs on the recording day. | Test data is built relative to today. |
+| State types | Moved from `src/agent.ts` to `src/agent-state.ts` to keep the agent under 400 lines. | No behaviour change. |
+
+**Nothing here is verified on Cloudflare.** The model allowance was exhausted when this was built, so no model call was made. Still to be established, each with one or two live calls:
+
+1. Whether a gateway cache hit for a Workers AI model uses no neurons. The documentation says a hit avoids the call to the provider but does not mention neurons.
+2. Whether a streamed response is cached, and whether a cached one replays as a stream the app can read.
+3. Whether the cheaper model calls tools reliably enough for the smoke test's turn. If it does not, it would fail deploys and roll production back for no fault of the build.
+4. Whether recordings of real turns replay cleanly. A reply that quotes the assistant's own usage will not, because that figure differs on each run.
+
+Known costs: a cached smoke turn no longer proves the model answered for that deploy; with the cheaper model the smoke test no longer exercises the chat model at all; the cost meter counts a cached turn's tokens as if they were billed. The owner created the gateway `invoice-buddy-smoke` in the account on 2026-10-06. Since the Wrangler configuration left git, `AI_GATEWAY_ID` is empty in the template and set to that name only in the owner's local `wrangler.jsonc`, for staging and production. `SMOKE_MODEL_ID` is left unset until a live call shows the cheaper model calls tools. Nothing from this branch is deployed.
 ### Wrangler configuration moved out of git (2026-10-06)
 
 Decided by the owner. `wrangler.jsonc` was renamed to `wrangler.example.jsonc` and `wrangler.jsonc` (with `wrangler.json` and `wrangler.toml`) added to `.gitignore`. The README has the setup steps.

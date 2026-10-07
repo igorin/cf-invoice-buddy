@@ -2,6 +2,7 @@
  * The assistant's own cost meter (spec UC-8, NFR-O3).
  * Pure code: no Cloudflare imports.
  */
+import { ratesFor } from "./models";
 
 /** Published Workers AI rates for the chat model, with where and when they were read. */
 export const LLAMA_3_3_PRICE = {
@@ -37,15 +38,20 @@ export type MeteredTurn =
 
 export type BudgetStatus = "ok" | "warn" | "exhausted";
 
-/** Converts token counts to neurons at the published per-token rates. */
+/**
+ * Converts token counts to neurons at the published per-token rates of the
+ * model that ran the turn (the chat model unless another is named).
+ */
 export function toNeurons(
-  usage: Pick<TokenUsage, "inputTokens" | "outputTokens">
+  usage: Pick<TokenUsage, "inputTokens" | "outputTokens">,
+  modelId?: string
 ): number {
+  const rates = ratesFor(modelId);
   const inputNeurons =
-    (usage.inputTokens * LLAMA_3_3_PRICE.neuronsPerMillionInputTokens) /
+    (usage.inputTokens * rates.neuronsPerMillionInputTokens) /
     TOKENS_PER_MILLION;
   const outputNeurons =
-    (usage.outputTokens * LLAMA_3_3_PRICE.neuronsPerMillionOutputTokens) /
+    (usage.outputTokens * rates.neuronsPerMillionOutputTokens) /
     TOKENS_PER_MILLION;
   return inputNeurons + outputNeurons;
 }
@@ -63,11 +69,14 @@ export function toCostMicros(neurons: number): number {
  * input tokens (what the provider reports when usage is missing), is
  * unmetered: nothing is estimated.
  */
-export function meterTurn(usage: TokenUsage | undefined): MeteredTurn {
+export function meterTurn(
+  usage: TokenUsage | undefined,
+  modelId?: string
+): MeteredTurn {
   if (usage === undefined || usage.inputTokens <= 0) {
     return { metered: false };
   }
-  const neurons = usage.reportedNeurons ?? toNeurons(usage);
+  const neurons = usage.reportedNeurons ?? toNeurons(usage, modelId);
   return {
     metered: true,
     inputTokens: usage.inputTokens,

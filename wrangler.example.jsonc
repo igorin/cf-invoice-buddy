@@ -53,7 +53,13 @@
         "ENVIRONMENT": "staging",
         "DAILY_NEURON_BUDGET": "400",
         "SMOKE_DAILY_NEURON_BUDGET": "1000",
-        "AUTH_MODE": "access"
+        "AUTH_MODE": "access",
+        // Optional, for cheaper testing (spec section 10); empty means off.
+        // AI_GATEWAY_ID: the name of an AI Gateway in your account with
+        // caching on, used by the smoke-test instance only.
+        // SMOKE_MODEL_ID: a cheaper model for the smoke-test instance.
+        "AI_GATEWAY_ID": "",
+        "SMOKE_MODEL_ID": ""
       }
     },
     "production": {
@@ -68,7 +74,13 @@
         "ENVIRONMENT": "production",
         "DAILY_NEURON_BUDGET": "3000",
         "SMOKE_DAILY_NEURON_BUDGET": "600",
-        "AUTH_MODE": "access"
+        "AUTH_MODE": "access",
+        // Optional, for cheaper testing (spec section 10); empty means off.
+        // AI_GATEWAY_ID: the name of an AI Gateway in your account with
+        // caching on, used by the smoke-test instance only.
+        // SMOKE_MODEL_ID: a cheaper model for the smoke-test instance.
+        "AI_GATEWAY_ID": "",
+        "SMOKE_MODEL_ID": ""
       }
     }
   }
