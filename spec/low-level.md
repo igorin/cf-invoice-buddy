@@ -727,7 +727,7 @@ Phase 5 built documentation search, the response checker and the evaluation suit
 - The smoke test names this cause when it meets it and says the deploy is not at fault.
 - The evaluation suite is the largest single use of the allowance, about 2,500 neurons for a clean run. It should not be run on a day when a deploy is planned until the enforced window is understood.
 
-**Phase 5 deployment status.** Merged to `main`. Uploaded to staging but not verified: no smoke run has passed there. Not in production. The `deployed/phase-5` tag does not exist.
+**Phase 5 deployment status.** Deployed on 2026-10-07 at commit `d9d7498`: staging at 00:28 UTC and production at 00:30 UTC, both passing 9 of 9 smoke checks. The `deployed/phase-5` tag is on that commit. The deploy also carries held replies, the shorter prompt and the cheaper-testing changes.
 
 ### Held replies and cheaper evaluations (2026-10-05)
 
@@ -759,6 +759,12 @@ On branch `experiment/cheaper-testing`, not merged. Prompted by research into te
 2. Whether a streamed response is cached, and whether a cached one replays as a stream the app can read.
 3. Whether the cheaper model calls tools reliably enough for the smoke test's turn. If it does not, it would fail deploys and roll production back for no fault of the build.
 4. Whether recordings of real turns replay cleanly. A reply that quotes the assistant's own usage will not, because that figure differs on each run.
+
+**First live results (2026-10-07).** The branch was merged and deployed with the gateway on for the smoke-test instance in both environments. What the two smoke runs show:
+
+- A streamed Workers AI call through the gateway works: the smoke turn called its tool and returned a reply in both environments. This is also the first real-model turn through held replies and the shorter prompt; the reply was shown, not withheld, and all eight amounts in it came from the tool result.
+- Each run metered 111.86 neurons, the same to two decimal places, 76 seconds apart. Identical token counts are what a cached reply would give, but two identical requests to the same model can give them too, so this is not proof of a cache hit. The meter counts tokens either way.
+- Still open: questions 1 and 2 above need the account's analytics or the gateway's log for the second run, and questions 3 and 4 have not been tried. No recording has been made and the cheaper model is still off.
 
 Known costs: a cached smoke turn no longer proves the model answered for that deploy; with the cheaper model the smoke test no longer exercises the chat model at all; the cost meter counts a cached turn's tokens as if they were billed. The owner created the gateway `invoice-buddy-smoke` in the account on 2026-10-06. Since the Wrangler configuration left git, `AI_GATEWAY_ID` is empty in the template and set to that name only in the owner's local `wrangler.jsonc`, for staging and production. `SMOKE_MODEL_ID` is left unset until a live call shows the cheaper model calls tools. Nothing from this branch is deployed.
 ### Wrangler configuration moved out of git (2026-10-06)
