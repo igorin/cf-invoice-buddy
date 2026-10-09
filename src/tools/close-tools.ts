@@ -73,7 +73,7 @@ export function buildCloseTools(agent: InvoiceBuddyAgent) {
   return {
     startInvoiceClose: tool({
       description:
-        "Start the monthly invoice close for a finished month: freeze its usage, total it, check it, then wait for the owner's approval. Use when the owner asks to close a month. It does not approve or finalize.",
+        "Start the monthly invoice close for a finished month: freeze its usage, total it, check it, then wait for the owner's approval. Use whenever the owner asks to close a month, including when they also ask you to approve it: start the close, and say that only they can approve. It does not approve or finalize.",
       // Loose for the same reason as explainBillChange: see tools/index.ts.
       inputSchema: z.object({
         month: z

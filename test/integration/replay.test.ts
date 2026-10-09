@@ -196,6 +196,30 @@ describe("a credit request turn through the agent (UC-3)", () => {
     expect(result.reply).toContain(SUPPORT_URL);
   });
 
+  it("drafts the request when the model sends true as text, as it did in the release evaluation", async () => {
+    const result = await replay(
+      "replay-credit-text-flag",
+      "usage-spike",
+      "I want a credit for the Workers spike. Replace any existing draft.",
+      (facts) => [
+        toolCall(
+          "draftCreditRequest",
+          JSON.stringify({
+            service: "Workers",
+            ownerReason: "a misconfigured Worker looped for two days",
+            replaceExisting: "true"
+          })
+        ),
+        answer(
+          "I drafted a credit request for Workers",
+          `, asking for ${overage(facts)}. This is TEST DATA.`
+        )
+      ]
+    );
+    expect(result.tools).toEqual(["draftCreditRequest"]);
+    expect(result.reply).toContain("I drafted a credit request for Workers");
+  });
+
   it("withholds a reply that says the assistant submitted the request", async () => {
     const result = await replay(
       "replay-credit-claim",
