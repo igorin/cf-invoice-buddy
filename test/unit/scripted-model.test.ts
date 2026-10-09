@@ -25,7 +25,6 @@ describe("scriptedToolFor", () => {
     ["Why is my bill higher than usual?", "explainBillChange"],
     ["What have I used this month?", "getUsageSummary"],
     ["I want a credit for the Workers spike", "draftCreditRequest"],
-    ["Please close last month", "startInvoiceClose"],
     ["Would another plan be cheaper?", "comparePlans"],
     ["What does this assistant cost me?", "getAssistantCost"],
     ["Switch to test mode", "setDataMode"]

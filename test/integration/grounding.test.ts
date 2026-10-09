@@ -118,9 +118,12 @@ describe("response checker in the agent (spec section 7)", () => {
   it("withholds a reply in which the model wrote a tool call out as text", async () => {
     InvoiceBuddyAgent.modelFactory = () =>
       sayingModel(
-        'I can start the close for you. {"name": "startInvoiceClose", "parameters": {}}'
+        'I can look that up for you. {"name": "getUsageSummary", "parameters": {}}'
       );
-    const { texts, audit } = await turn("ground-tool-text", "Close last month");
+    const { texts, audit } = await turn(
+      "ground-tool-text",
+      "What have I used?"
+    );
     expect(texts.at(-1)).toBe(UNVERIFIED_MESSAGE);
     expect(audit[0]?.detail_json).toContain("tool call written as text");
   });

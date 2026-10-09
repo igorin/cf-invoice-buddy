@@ -83,7 +83,6 @@ describe("selectCases: which evaluation cases a change calls for", () => {
       "docs",
       "cost",
       "credit",
-      "close",
       "plans"
     ]);
     for (const item of CASES) {

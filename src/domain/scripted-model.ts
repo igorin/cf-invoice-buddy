@@ -28,7 +28,6 @@ export function scriptedToolFor(message: string): ScriptedCall | null {
       args: { service: "Workers", ownerReason: message, replaceExisting: true }
     };
   }
-  if (/\bclose\b/.test(text)) return { name: "startInvoiceClose", args: {} };
   if (/plan|cheaper/.test(text)) return { name: "comparePlans", args: {} };
   if (/assistant cost|cost me/.test(text)) {
     return { name: "getAssistantCost", args: {} };

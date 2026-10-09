@@ -2,21 +2,14 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
 /**
- * Browser tests (spec NFR-T4, section 10) for UC-1, UC-3, UC-6, UC-7, UC-9
- * and UC-10. The app runs locally with a scripted model: it picks a tool
+ * Browser tests (spec NFR-T4, section 10) for UC-1, UC-3, UC-7, UC-9 and
+ * UC-10. The app runs locally with a scripted model: it picks a tool
  * from words in the question and then writes one fixed line, so what is
  * tested here is the app and its cards, not the model.
  */
 
 const SPIKE = "Usage spike";
 const REPLY = "The details are in the card above.";
-
-const lastMonth = (): string => {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))
-    .toISOString()
-    .slice(0, 7);
-};
 
 const SPIKE_ID = "usage-spike";
 const dataSwitch = (page: Page) => page.getByRole("combobox");
@@ -185,40 +178,4 @@ test("UC-7: a plan comparison is shown as an estimate", async ({ page }) => {
   ).toBeVisible();
   await expect(page.getByText(REPLY)).toBeVisible();
   await expectAccessible(page);
-});
-
-test("UC-6: an invoice close is approved from the approval card, and only there", async ({
-  page
-}) => {
-  await start(page, "test");
-  const month = lastMonth();
-  await ask(page, "Please close last month.");
-  const approval = page.getByRole("region", {
-    name: `Approve the invoice close for ${month}`
-  });
-  await expect(approval).toBeVisible();
-  await expect(
-    approval.getByText("Test data. No real period is closed.")
-  ).toBeVisible();
-  await expect(approval.getByRole("cell", { name: "Total" })).toBeVisible();
-  await expectAccessible(page);
-
-  await approval
-    .getByLabel("Reason (optional)")
-    .fill("Checked against the invoice.");
-  await approval
-    .getByRole("button", { name: `Approve and close ${month}` })
-    .click();
-  await expect(approval).toBeHidden();
-
-  // Asking again shows the close as final: a period closes once only.
-  await ask(page, "Please close last month again.");
-  await expect(
-    page.getByText("Closed. The period's figures are final.")
-  ).toBeVisible();
-  await expect(
-    page.getByText("Owner's reason: Checked against the invoice.", {
-      exact: false
-    })
-  ).toBeVisible();
 });

@@ -231,32 +231,6 @@ describe("claims of submitting a credit request (UC-3)", () => {
   });
 });
 
-describe("claims of approving or closing a period (UC-6)", () => {
-  const rules = (text: string) =>
-    checkGrounding(input(text)).map((violation) => violation.rule);
-
-  it.each([
-    "I have approved the close.",
-    "I've closed the period for you.",
-    "I closed the September period.",
-    "I will finalize the close now.",
-    "I'll approve it.",
-    "I have now finalised the period."
-  ])("flags %j", (text) => {
-    expect(rules(text)).toEqual(["UC-6"]);
-  });
-
-  it.each([
-    "I started the close. It is waiting for your approval.",
-    "I cannot approve it; use the Approve button in the card.",
-    "The period is closed. Its figures are final.",
-    "You approved the close.",
-    "Only you can approve or reject the close."
-  ])("allows %j", (text) => {
-    expect(rules(text)).toEqual([]);
-  });
-});
-
 describe("plan amounts must be called estimates (G-8)", () => {
   const plans = {
     verdict: "On Workers Paid the same usage is estimated at $38.00.",
@@ -290,7 +264,7 @@ describe("a tool call written out as text", () => {
     checkGrounding(input(text)).map((violation) => violation.rule);
 
   it.each([
-    'I can start the close for you. {"name": "startInvoiceClose", "parameters": {}}',
+    'I can start the close for you. {"name": "getUsageSummary", "parameters": {}}',
     '{"name":"explainBillChange","arguments":{"month":"2026-09"}}'
   ])("is flagged: %j", (text) => {
     expect(rules(text)).toEqual(["tool-text"]);

@@ -108,7 +108,6 @@ export class InvoiceBuddyAgent extends RecordsAgent {
     // State saved by an earlier version may lack newer fields.
     this.setState({ ...INITIAL_STATE, ...this.state });
     this.publishSelfCost();
-    this.publishApprovals();
     // Cron schedules are idempotent, so this is safe on every start.
     await this.schedule(SYNC_CRON, "syncUsage");
   }
@@ -246,7 +245,6 @@ export class InvoiceBuddyAgent extends RecordsAgent {
         ? { dataset }
         : loadScenario(this.ctx.storage.sql, scenario, this.today());
     this.setState({ ...this.state, dataMode: mode });
-    this.publishApprovals();
     this.audit("set_data_mode", mode.dataset === "test" ? mode.scenario : null);
     const title = SCENARIOS.find(
       (s) => mode.dataset === "test" && s.id === mode.scenario

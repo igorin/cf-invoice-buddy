@@ -27,7 +27,7 @@ export type GroundingInput = Readonly<{
 }>;
 
 export type Violation = Readonly<{
-  rule: "G-1" | "G-3" | "G-4" | "G-7" | "G-8" | "UC-3" | "UC-6" | "tool-text";
+  rule: "G-1" | "G-3" | "G-4" | "G-7" | "G-8" | "UC-3" | "tool-text";
   detail: string;
 }>;
 
@@ -110,12 +110,6 @@ function causeWithoutFinding(input: GroundingInput): string | null {
 const SUBMISSION_CLAIM =
   /\bI(?:['’]ve| have|['’]ll| will| can| could)?(?: now| already| just| also)? (?:submit(?:ted)?|filed?|sent|send) (?:it|the|this|that|your|a)\b/i;
 
-// Only the owner approves or finalizes an invoice close (UC-6, NFR-S3). This
-// catches a reply that says, in the first person, that the assistant did.
-// "I started the close" and "I cannot approve it" do not match.
-const CLOSE_CLAIM =
-  /\bI(?:['’]ve| have|['’]ll| will)?(?: now| already| just| also)? (?:approved?|finali[sz]ed?|closed?) (?:it|the|this|that|your)\b/i;
-
 // Llama 3.3 sometimes writes a tool call out as text instead of making it.
 // Such a reply is raw JSON to the owner, and the tool never ran.
 const TOOL_CALL_AS_TEXT =
@@ -181,14 +175,6 @@ export function checkGrounding(input: GroundingInput): Violation[] {
     violations.push({
       rule: "tool-text",
       detail: "tool call written as text instead of being made"
-    });
-  }
-
-  const closeClaim = CLOSE_CLAIM.exec(input.text)?.[0];
-  if (closeClaim) {
-    violations.push({
-      rule: "UC-6",
-      detail: `says the assistant approves or closes periods: "${closeClaim}"`
     });
   }
 

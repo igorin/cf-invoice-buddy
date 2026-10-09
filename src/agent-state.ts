@@ -2,7 +2,6 @@ import type { Dataset } from "./db/usage-store";
 import type { ALLOWANCE_SOURCE, Plan } from "./domain/allowances";
 import type { ScenarioId } from "./domain/scenarios";
 import type { UsageSummary } from "./domain/usage-summary";
-import type { CloseView } from "./services/close-service";
 
 /** The agent's synced state and the views built from it. */
 
@@ -23,8 +22,6 @@ export type AgentState = Readonly<{
   selfCost: SelfCost;
   dataMode: DataMode;
   lastSyncAt: string | null;
-  /** Invoice closes waiting for the owner's decision, in the current mode. */
-  pendingApprovals: ReadonlyArray<CloseView>;
 }>;
 
 /** What the usage panel and the usage tool are built from (UC-9). */
@@ -46,6 +43,5 @@ export const INITIAL_STATE: AgentState = {
     cachedCalls: 0
   },
   dataMode: { dataset: "live" },
-  lastSyncAt: null,
-  pendingApprovals: []
+  lastSyncAt: null
 };

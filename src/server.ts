@@ -4,7 +4,6 @@ import { authenticate } from "./auth";
 import { readConfig, type Config } from "./config";
 
 export { InvoiceBuddyAgent } from "./agent";
-export { InvoiceCloseWorkflow } from "./workflows/invoice-close";
 
 declare const __COMMIT_SHA__: string;
 

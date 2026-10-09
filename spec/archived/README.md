@@ -6,6 +6,7 @@ Copies of the spec at the points where its scope changed significantly, so the o
 | --- | --- |
 | [2026-10-04-original](2026-10-04-original/) | The spec as first committed, before any code (commit `075a20b`). |
 | [2026-10-07-before-merge](2026-10-07-before-merge/) | The spec after phase 7, when the design sections still described the original design and every difference was a dated note in section 14 of the low-level spec. |
+| [2026-10-09-before-dropping-invoice-close](2026-10-09-before-dropping-invoice-close/) | The spec with the monthly invoice close (UC-6) in it, as built: the workflow, its tools, the approval card and its tests. Archived when the owner dropped the use case. |
 
 On 2026-10-07 the body of the current spec was rewritten to describe what was built. The dated notes remain in its section 14 as a record.
 
@@ -51,6 +52,12 @@ Each row says what the original spec planned and what the product does now. The 
 | A CI pipeline deploys on merge and promotes by hand | A script run from a developer machine, with the same steps | The deploy token has not been added to GitHub. |
 | Coverage thresholds in one run | Two runs: domain code at 95% by the unit tests, the rest at 80% by the integration tests | A merged run gave figures that depended on run order. |
 | A model grader for paraphrased "no cause" answers | Graders are code only | Not needed so far. |
+
+### Built, then dropped
+
+| Item | Why |
+| --- | --- |
+| Monthly invoice close (UC-6): a Cloudflare Workflow that froze a month's usage, totalled and checked it, and waited for the owner's approval | Dropped by the owner on 2026-10-09. Cloudflare has no operation that closes or approves an invoice, and the agent's access is read-only, so it was only a record in the agent's own database with a name that suggested otherwise. The original brief asked for it; nobody checked, before building it, what on Cloudflare's side it corresponded to. Every use case is now listed against the API access it needs, in section 7 of the high-level spec. |
 
 ### Planned and not built
 
