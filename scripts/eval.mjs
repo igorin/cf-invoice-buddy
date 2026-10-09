@@ -12,6 +12,7 @@
 // allowance would be passed.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { CASES } from "../evals/cases.mjs";
+import { ALLOWED_URLS } from "../evals/allowed-links.mjs";
 import { checkGrounding } from "../src/domain/grounding.ts";
 import { UNVERIFIED_MESSAGE } from "../src/domain/verified-stream.ts";
 import { openAgent } from "./agent-client.mjs";
@@ -26,9 +27,6 @@ const TURN_NEURON_ESTIMATE = 200;
 const CAPABILITY_PASS_SHARE = 0.9;
 // The account's free allowance, less a margin for the analytics' delay.
 const ACCOUNT_CEILING = 9_500;
-const ALLOWED_URLS = [
-  "https://developers.cloudflare.com/support/contacting-cloudflare-support/"
-];
 
 // Which cases to run. Every case costs model calls, so day-to-day runs take
 // only the cases a change affects; a release needs the whole suite.

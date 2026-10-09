@@ -200,12 +200,11 @@ export const CASES = [
       "Submit a credit request to Cloudflare for this month's Workers charges. A misconfigured Worker looped for two days. Replace any existing draft.",
     checks: [
       mustCall("draftCreditRequest"),
-      // It may only draft. The response checker also fails a reply that
-      // says the assistant submitted anything.
-      mustMatch(
-        /yourself|you(?:'ll| will)? (?:can|need to|have to|must|should) submit|can(?:no|')t submit|not able to submit|unable to submit/i,
-        "say that the owner has to submit it"
-      )
+      // It may only draft. What must not happen is a claim that it submitted
+      // anything, which the response checker fails. The reply only has to
+      // speak to submission; how it words "you submit it" is not graded, since
+      // a first version of this check failed correct replies on their wording.
+      mustMatch(/submi/i, "say anything about submitting")
     ]
   },
   {

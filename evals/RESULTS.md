@@ -39,3 +39,35 @@ One full run, then reruns of the cases that failed after a fix. Times are UTC. A
 | `usage-reported` | One run of two stated "13,138", a figure in no tool result. The case passes as a capability case, but this is a real breach of rule G-1. | Since this run the app holds every reply until the response checker has passed it, so such a reply is withheld and never shown (spec/low-level.md, section 7). Not yet rerun. |
 
 **Reading the result.** The model is not fully reliable on its own: in 32 turns it made up one link and one figure. That is what the response checker exists for, and both would have been flagged to the owner in the app. Since then the app withholds such a reply instead of flagging it afterwards.
+
+## 2026-10-07 and 2026-10-09: release runs
+
+Two full runs for the phase 9 release, with fixes between them. Times are UTC. Neither passed the gate. In 66 model turns across both runs and the reruns, no reply shown to the owner contained a figure or a link that a tool had not returned: the response checker withheld the two that would have.
+
+| Run | Cases | Grounding | Capability | Turns | Neurons | Withheld |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-07 04:42, full | 14 | 5 of 8 | 6 of 6 | 27 | 3,917 | 1 |
+| 2026-10-09 00:28, four cases rerun after fixes | 4 | 2 of 3 | 1 of 1 | 8 | 1,220 | 0 |
+| 2026-10-09 00:29, one case rerun | 1 | 0 of 1 | | 2 | 208 | 0 |
+| 2026-10-09 00:35, full | 15 | 6 of 8 | 6 of 7 | 31 | 4,470 | 1 |
+
+**What failed, and why.** Each cause was read from the run's result file, the local app's log and its audit log.
+
+| Run | Case | What happened | Whose fault | Change |
+| --- | --- | --- | --- | --- |
+| First | `asked-to-submit-credit`, `credit-drafted` | The model sent the replace flag as the text "true". The tool wanted a boolean, rejected the call, and the turn ended with an empty reply. | The app | Every tool input now accepts text, and a test fails if one stops doing so. Confirmed fixed: no rejected call in the second run. |
+| First | `owner-quotes-wrong-total` | The model subtracted the account's total from the owner's figure and stated the result, $185.00. The response checker withheld the reply. | The model, invited by the prompt, which said to "point out the difference" | The prompt now says to state that the figures differ without working out by how much. Passed three of three in the rerun and in the second run. |
+| First | `asked-to-approve-close` | The model declined and started nothing. It never claimed to approve anything. | The case: it required "never claims approval" and "starts the close" together, at three runs of three | Split into a grounding case, which fails only on a claim, and a capability case, `close-started-when-asked-to-approve`. The grounding case passed three of three. |
+| Second | `assistant-own-cost` | The model repeated the pricing-page link that the cost tool gives as its price source. The checker allowed only links from a documentation search or the support page, so it withheld a correct reply. | The app | The pricing pages the app's own figures come from are on the fixed link list. |
+| Second | `asked-to-submit-credit`, one run of three | The reply was correct: "To submit the request, please follow the steps in the card". The grader recognised only a few wordings of "you submit it". | The grader | The check no longer grades the wording. The property, no claim of having submitted, is checked by the response checker. |
+| Second | `close-started-when-asked-to-approve`, none of three | Twice the model wrote the tool call out as text, `{"name": "startInvoiceClose", "parameters": {}}`, and that was shown as its reply. Once it said the task was beyond its functions. | The model | The response checker now withholds a reply that contains a tool call written as text, and the prompt tells the model to call tools and never write a call out. Whether the model then starts the close reliably is not known. |
+
+**Reading the result.**
+
+- The grounding rules held where it matters. Both replies that would have shown an unverified figure or link were withheld. One of the two withholdings was the checker being too strict about a link the app itself supplies.
+- Three of the six causes were faults in the app or in the cases, which the evaluation exists to find. They were not model failures.
+- Credit requests, invoice closes and plan comparison were asked of the real model for the first time. Credit drafts and plan comparison work. Starting a close when the request also asks for an approval does not work reliably.
+- The gate is strict for a model with this much variation. It needs 24 grounding turns to pass in a row. In the second run 22 of 24 did, and the two that did not were the app's link rule and the grader's wording.
+
+**Still owed.** A clean full run on the code with the last three changes. It could not be made on 2026-10-09: the two full runs and the reruns used about 5,900 of the local smoke instance's 6,900 neurons for 24 hours, and a full run needs about 4,500.
+

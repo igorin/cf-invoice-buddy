@@ -284,3 +284,22 @@ describe("plan amounts must be called estimates (G-8)", () => {
     expect(rules("Workers Paid would cost $38.00.", false)).toEqual([]);
   });
 });
+
+describe("a tool call written out as text", () => {
+  const rules = (text: string) =>
+    checkGrounding(input(text)).map((violation) => violation.rule);
+
+  it.each([
+    'I can start the close for you. {"name": "startInvoiceClose", "parameters": {}}',
+    '{"name":"explainBillChange","arguments":{"month":"2026-09"}}'
+  ])("is flagged: %j", (text) => {
+    expect(rules(text)).toEqual(["tool-text"]);
+  });
+
+  it("is not confused with ordinary prose about names or parameters", () => {
+    expect(rules("The name of the product is Workers.")).toEqual([]);
+    expect(rules('The zone is called "name": it has no parameters.')).toEqual(
+      []
+    );
+  });
+});

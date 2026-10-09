@@ -154,7 +154,7 @@ These rules apply to every answer. They are the main product requirement.
 | G-4 | When neither (a) nor (b) holds, the agent says it cannot explain the invoice. It still shows the factual breakdown. It does not offer "possible reasons". |
 | G-5 | Causes found in account data are shown with their evidence: product, dates, quantities, amounts. |
 | G-6 | Data gaps are stated. If usage for part of the period is missing or stale, the agent says so and does not extrapolate. |
-| G-7 | Links come only from documentation tool results or from a fixed, reviewed list in the code (the support page used in UC-3). The agent never composes a URL. |
+| G-7 | Links come only from documentation tool results or from a fixed, reviewed list in the code: the support page used in UC-3 and the pricing pages the app's own figures come from. The agent never composes a URL. |
 | G-8 | A figure that is estimated, not read from billing data or the meter, is labelled as an estimate where it is stated. |
 | G-9 | A figure that comes from fixture data is labelled as test data where it is stated. Live and fixture figures never appear in the same answer. |
 

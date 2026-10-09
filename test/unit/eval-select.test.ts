@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { ALLOWED_URLS as RUNNER_URLS } from "../../evals/allowed-links.mjs";
 import { CASES } from "../../evals/cases.mjs";
 import { selectCases } from "../../evals/select";
+import { ALLOWED_URLS } from "../../src/domain/allowed-links";
 
 const cases = [
   { id: "a", areas: ["explain"] },
@@ -91,5 +93,11 @@ describe("selectCases: which evaluation cases a change calls for", () => {
         item.id
       ).toBe(true);
     }
+  });
+});
+
+describe("the evaluation runner's allowed links", () => {
+  it("are the same as the app's", () => {
+    expect([...RUNNER_URLS].sort()).toEqual([...ALLOWED_URLS].sort());
   });
 });

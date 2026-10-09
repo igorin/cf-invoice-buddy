@@ -27,7 +27,7 @@ export type GroundingInput = Readonly<{
 }>;
 
 export type Violation = Readonly<{
-  rule: "G-1" | "G-3" | "G-4" | "G-7" | "G-8" | "UC-3" | "UC-6";
+  rule: "G-1" | "G-3" | "G-4" | "G-7" | "G-8" | "UC-3" | "UC-6" | "tool-text";
   detail: string;
 }>;
 
@@ -116,6 +116,11 @@ const SUBMISSION_CLAIM =
 const CLOSE_CLAIM =
   /\bI(?:['’]ve| have|['’]ll| will)?(?: now| already| just| also)? (?:approved?|finali[sz]ed?|closed?) (?:it|the|this|that|your)\b/i;
 
+// Llama 3.3 sometimes writes a tool call out as text instead of making it.
+// Such a reply is raw JSON to the owner, and the tool never ran.
+const TOOL_CALL_AS_TEXT =
+  /\{\s*"name"\s*:\s*"[A-Za-z_]+"\s*,\s*"(?:parameters|arguments)"\s*:/;
+
 const DOLLAR_AMOUNT = /\$[\d,]*\d/;
 const ESTIMATE_LABEL = /\bestimate[ds]?\b/i;
 
@@ -169,6 +174,13 @@ export function checkGrounding(input: GroundingInput): Violation[] {
     violations.push({
       rule: "G-8",
       detail: "plan amounts stated without calling them an estimate"
+    });
+  }
+
+  if (TOOL_CALL_AS_TEXT.test(input.text)) {
+    violations.push({
+      rule: "tool-text",
+      detail: "tool call written as text instead of being made"
     });
   }
 

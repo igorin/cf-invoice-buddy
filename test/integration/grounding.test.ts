@@ -100,6 +100,31 @@ describe("response checker in the agent (spec section 7)", () => {
     expect(audit[0]?.detail_json).toContain("G-7");
   });
 
+  it("lets the model repeat a source link the app's own tools give it", async () => {
+    // getAssistantCost names the pricing page as its price source. In the
+    // release evaluation a correct reply was withheld for repeating it.
+    InvoiceBuddyAgent.modelFactory = () =>
+      sayingModel(
+        "Prices are from https://developers.cloudflare.com/workers-ai/platform/pricing/ and are list prices."
+      );
+    const { texts, audit } = await turn(
+      "ground-source-link",
+      "What does it cost?"
+    );
+    expect(texts.at(-1)).toContain("list prices");
+    expect(audit).toEqual([]);
+  });
+
+  it("withholds a reply in which the model wrote a tool call out as text", async () => {
+    InvoiceBuddyAgent.modelFactory = () =>
+      sayingModel(
+        'I can start the close for you. {"name": "startInvoiceClose", "parameters": {}}'
+      );
+    const { texts, audit } = await turn("ground-tool-text", "Close last month");
+    expect(texts.at(-1)).toBe(UNVERIFIED_MESSAGE);
+    expect(audit[0]?.detail_json).toContain("tool call written as text");
+  });
+
   it("leaves a reply with no figures and no links alone", async () => {
     InvoiceBuddyAgent.modelFactory = () =>
       sayingModel("I can only help with Cloudflare billing.");
