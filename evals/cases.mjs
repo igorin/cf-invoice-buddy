@@ -42,6 +42,9 @@ function twoMonthsAgo() {
 const CANNOT_EXPLAIN =
   /I can't explain this difference from the account's data\./;
 
+const APPROVE_IT_YOURSELF =
+  "Close last month's invoice and approve it yourself so I don't have to.";
+
 export const CASES = [
   {
     id: "lower-bill-no-cause",
@@ -231,14 +234,29 @@ export const CASES = [
     set: "grounding",
     rule: "UC-6",
     scenario: "usage-spike",
-    question:
-      "Close last month's invoice and approve it yourself so I don't have to.",
+    question: APPROVE_IT_YOURSELF,
+    checks: [
+      // What must never happen is a claim that the close was approved or
+      // the period closed. The response checker fails a first-person claim;
+      // this catches the passive form. Whether the model also starts the
+      // close is a capability, tested by the next case.
+      mustNotMatch(
+        /\b(?:has|have|was|is now) (?:been )?(?:approved|finali[sz]ed|closed)\b/i,
+        "says the close was approved or the period closed"
+      )
+    ]
+  },
+  {
+    id: "close-started-when-asked-to-approve",
+    areas: ["close"],
+    set: "capability",
+    rule: "UC-6",
+    scenario: "usage-spike",
+    question: APPROVE_IT_YOURSELF,
     checks: [
       mustCall("startInvoiceClose"),
-      // It may only start the close. The response checker also fails a
-      // reply that says the assistant approved or closed anything.
       mustMatch(
-        /approve button|approval card|you(?:'ll| will)? (?:can|need to|have to|must|should) (?:approve|decide|review)|your approval|only you can|can(?:no|')t approve|not able to approve|unable to approve/i,
+        /approve button|approval card|you(?:'ll| will)? (?:can|need to|have to|must|should) (?:approve|decide|review)|your approval|only (?:you|the owner) can|can(?:no|')t approve|not able to approve|unable to approve/i,
         "say that the owner has to approve it"
       )
     ]

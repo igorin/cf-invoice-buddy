@@ -1,5 +1,5 @@
 # cf-invoice-buddy
-Experimental AI bot that runs on Cloudflare and explains why the invoice is what it is.
+AI bot for Cloudflare that runs on Workers AI and helps with understanding user invoice context and do a what-if plan comparison.
 
 Specs are in [spec/](spec/).
 
