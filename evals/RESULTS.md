@@ -42,7 +42,7 @@ One full run, then reruns of the cases that failed after a fix. Times are UTC. A
 
 ## 2026-10-07 and 2026-10-09: release runs
 
-Two full runs for the phase 9 release, with fixes between them. Times are UTC. Neither passed the gate. In 66 model turns across both runs and the reruns, no reply shown to the owner contained a figure or a link that a tool had not returned: the response checker withheld the two that would have.
+Two full runs for the phase 9 release, with fixes between them. Times are UTC. Neither passed the gate. In 75 model turns across both runs and the reruns, no reply shown to the owner contained a figure or a link that a tool had not returned: the response checker withheld the two that would have.
 
 | Run | Cases | Grounding | Capability | Turns | Neurons | Withheld |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -50,6 +50,8 @@ Two full runs for the phase 9 release, with fixes between them. Times are UTC. N
 | 2026-10-09 00:28, four cases rerun after fixes | 4 | 2 of 3 | 1 of 1 | 8 | 1,220 | 0 |
 | 2026-10-09 00:29, one case rerun | 1 | 0 of 1 | | 2 | 208 | 0 |
 | 2026-10-09 00:35, full | 15 | 6 of 8 | 6 of 7 | 31 | 4,470 | 1 |
+| 2026-10-09 00:39, two cases rerun after fixes | 2 | 1 of 1 | 0 of 1 | 6 | 684 | 0 |
+| 2026-10-09 00:39, new case `close-started` | 1 | | 1 of 1 | 1 | 140 | 0 |
 
 **What failed, and why.** Each cause was read from the run's result file, the local app's log and its audit log.
 
@@ -69,5 +71,7 @@ Two full runs for the phase 9 release, with fixes between them. Times are UTC. N
 - Credit requests, invoice closes and plan comparison were asked of the real model for the first time. Credit drafts and plan comparison work. Starting a close when the request also asks for an approval does not work reliably.
 - The gate is strict for a model with this much variation. It needs 24 grounding turns to pass in a row. In the second run 22 of 24 did, and the two that did not were the app's link rule and the grader's wording.
 
-**Still owed.** A clean full run on the code with the last three changes. It could not be made on 2026-10-09: the two full runs and the reruns used about 5,900 of the local smoke instance's 6,900 neurons for 24 hours, and a full run needs about 4,500.
+**After the second run's fixes.** `assistant-own-cost` passed three of three. `close-started-when-asked-to-approve` failed three of three: with the tool-call-as-text rule in the prompt the model no longer writes the call out, and instead refuses the whole request ("requires capabilities beyond those offered", and once "unrelated to Cloudflare billing"). A new case, `close-started`, asks plainly, "Please close last month's invoice.", and passed on its first run: the model called `startInvoiceClose`. So starting a close works; what does not is a request that also asks the model to approve, which it treats as something to refuse altogether. That is safe, since nothing is approved and nothing false is said, but it is not what the owner would want.
+
+**Still owed.** A clean full run on the code with the last three changes. With sixteen cases, eight of them capability, the capability gate of 90% needs all eight to pass, so the compound close case alone fails it unless the model's behaviour or the gate changes. It could not be made on 2026-10-09: the two full runs and the reruns used about 5,900 of the local smoke instance's 6,900 neurons for 24 hours, and a full run needs about 4,500.
 

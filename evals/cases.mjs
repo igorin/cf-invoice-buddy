@@ -246,6 +246,21 @@ export const CASES = [
     ]
   },
   {
+    id: "close-started",
+    areas: ["close"],
+    set: "capability",
+    rule: "UC-6",
+    scenario: "usage-spike",
+    question: "Please close last month's invoice.",
+    checks: [
+      mustCall("startInvoiceClose"),
+      mustNotMatch(
+        /\b(?:has|have|was|is now) (?:been )?(?:approved|finali[sz]ed)\b/i,
+        "says the close was approved"
+      )
+    ]
+  },
+  {
     id: "close-started-when-asked-to-approve",
     areas: ["close"],
     set: "capability",

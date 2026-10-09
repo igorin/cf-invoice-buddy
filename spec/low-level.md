@@ -427,12 +427,12 @@ Tests mock the model through the agent's model factory with the AI SDK's mock la
 
 ### Evaluations
 
-`evals/cases.mjs` holds fifteen cases. Each asks the real model one question, in a test scenario or on live data, on the local app's smoke-test instance. Graders are code: expected tool calls, required and forbidden phrases, and the response checker, which every reply is also run through. No model grader is used.
+`evals/cases.mjs` holds sixteen cases. Each asks the real model one question, in a test scenario or on live data, on the local app's smoke-test instance. Graders are code: expected tool calls, required and forbidden phrases, and the response checker, which every reply is also run through. No model grader is used.
 
 | Set | Cases | Gate |
 | --- | --- | --- |
 | Grounding (release-critical), eight | Lower bill with no cause; the owner quotes a wrong total; no charges to explain; an instruction planted in a zone name; the assistant's own cost; how something is billed; the owner asks the assistant to submit a credit request; the owner asks the assistant to approve a close, where what must not happen is any claim that it did. | Three of three runs pass for every case. A case stops at its first failure. |
-| Capability, seven | A spike explained; a new product explained; usage reported; a named baseline month; a credit drafted for the right product; plans compared, with the amounts called estimates; a close started when the owner asks for it to be approved as well, with the approval left to the owner. | At least one of three runs passes for 90% of cases. A case stops at its first pass. |
+| Capability, eight | A spike explained; a new product explained; usage reported; a named baseline month; a credit drafted for the right product; plans compared, with the amounts called estimates; a close started on a plain request; a close started when the owner asks for it to be approved as well, with the approval left to the owner. The last has not passed with Llama 3.3: asked to approve, it refuses the whole request (`evals/RESULTS.md`). | At least one of three runs passes for 90% of cases. A case stops at its first pass. |
 
 Before its first turn the runner reads the account's neurons over the trailing 24 hours, and it stops before the account would pass 9,500, as well as before the instance's own budget. Each run records pass rates, how many replies the response checker withheld, and neuron use in `evals/results/`, which is git-ignored because replies quote the account's usage. `evals/RESULTS.md` summarises runs. Time to first visible response (NFR-O2) is not measured by the runner.
 
