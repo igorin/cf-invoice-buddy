@@ -3,6 +3,7 @@ import {
   type UIMessage,
   type UIMessageChunk
 } from "ai";
+import { ALLOWED_URLS } from "../domain/allowed-links";
 import { checkGrounding, type Violation } from "../domain/grounding";
 import {
   holdTextUntilChecked,
@@ -15,10 +16,7 @@ import {
  * section 7): compares the text with the results of the turn's tools.
  */
 
-/** Links the app itself gives, which need no documentation search. */
-export const ALLOWED_URLS = [
-  "https://developers.cloudflare.com/support/contacting-cloudflare-support/"
-] as const;
+export { ALLOWED_URLS };
 
 const DOCS_TOOL = "searchCloudflareDocs";
 const EXPLAIN_TOOL = "explainBillChange";

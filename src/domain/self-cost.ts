@@ -11,7 +11,7 @@ export const LLAMA_3_3_PRICE = {
   usdPerThousandNeurons: 0.011,
   freeNeuronsPerDay: 10_000,
   source: "https://developers.cloudflare.com/workers-ai/platform/pricing/",
-  checkedOn: "2026-10-04"
+  checkedOn: "2026-10-07"
 } as const;
 
 const TOKENS_PER_MILLION = 1_000_000;

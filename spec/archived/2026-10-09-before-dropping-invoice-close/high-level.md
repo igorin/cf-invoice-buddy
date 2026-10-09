@@ -13,7 +13,7 @@ Requirement IDs (`UC-`, `G-`, `NFR-`) are stable; a retired ID is not reused. Te
 
 A Cloudflare account owner opens an invoice that differs from what they expected and cannot tell why. Finding out means cross-reading the invoice, per-product usage and plan details by hand. When the charge is wrong, asking for a credit means assembling the evidence by hand as well.
 
-Invoice Buddy is a chat agent for one Cloudflare account. It explains bill changes from the account's own usage data, compares plans, and drafts credit requests for the owner to submit. It reads the account and changes nothing in it.
+Invoice Buddy is a chat agent for one Cloudflare account. It explains bill changes from the account's own usage data, compares plans, runs the monthly invoice close, and drafts credit requests for the owner to submit.
 
 ## 2. Users and scope
 
@@ -24,6 +24,7 @@ Invoice Buddy is a chat agent for one Cloudflare account. It explains bill chang
 - A usage summary per product that is always on screen: quantity used, included allowance and amount billed, even when the bill is $0.
 - Explaining why a bill is higher or lower than usual, by product and by day.
 - Credit requests: gather evidence, write the draft, and give it to the owner with instructions for submitting it. The agent remembers every draft.
+- Monthly invoice close with an owner approval gate.
 - Plan comparison against the account's actual usage.
 - Reporting and capping what the assistant itself costs to run.
 - A test mode, entered only on the owner's explicit request, in which the agent works on fixture data.
@@ -75,9 +76,19 @@ The agent cannot see what happened after the owner submitted a request. The owne
 
 Showing Cloudflare's decision in chat without the owner asking needs a submission channel that v1 does not have. See [section 11](#11-future-backlog). The ID is retained so references stay valid.
 
-### UC-6 Monthly invoice close (dropped)
+### UC-6 Monthly invoice close
 
-Dropped on 2026-10-09, after it had been built and deployed in phase 7. Cloudflare has no operation that closes or approves an invoice, and the agent's access to the account is read-only, so the feature was only a record in the agent's own database: a frozen copy of a month's usage with the owner's sign-off. Its name suggested an action on Cloudflare's side that it did not and could not take. The ID is retained so references stay valid. What was built is in [archived/2026-10-09-before-dropping-invoice-close](archived/2026-10-09-before-dropping-invoice-close/).
+The close workflow runs for one billing period in five steps:
+
+1. **Snapshot:** freeze the period's usage so later data changes cannot alter the close.
+2. **Rate:** total the snapshot into line items per product and reconcile them with the issued invoice.
+3. **Anomaly check:** run the same detectors used in UC-1 and flag any reconciliation gap.
+4. **Wait for approval:** the owner reviews the summary and approves or rejects.
+5. **Finalize:** mark the period closed. A closed period is immutable.
+
+The owner starts a close in chat, for a month named or for the last finished one. A period that has not ended cannot be closed. The summary appears in an approval card above the chat, with the line items, the reconciliation, what the detectors found, and Approve and Reject buttons. Those buttons are the only way to decide: the agent can start a close and report its state, and nothing else. A close nobody decides on expires after seven days. A close that was rejected, expired or failed can be started again.
+
+**Accepted when:** a period can be closed once only; a rejected or expired close leaves the period open; the close survives restarts and waits of several days.
 
 ### UC-7 Compare plans
 
@@ -123,11 +134,11 @@ The owner can ask the agent to work in test mode. In test mode the agent's data 
 
 1. **Entering.** Test mode starts only on the owner's explicit request: a switch in the interface, or a request in chat that the owner then confirms with a button. The agent never enters test mode on its own, and text in data or documentation cannot switch it.
 2. **Scenarios.** The owner picks one of five named scenarios: a usage spike, a lower bill with no visible cause, a new product, a zone whose name is an instruction to the assistant, and a bill of zero. Each scenario is a complete fixture account: usage, invoices and baseline periods, generated relative to today so its current period is always the current month.
-3. **Behaviour.** Bill explanations, the usage summary, credit drafts and plan comparison all work as specified, on the scenario's data.
+3. **Behaviour.** Bill explanations, the usage summary, credit drafts and the invoice close all work as specified, on the scenario's data.
 4. **Labelling.** While test mode is on, a banner says so and names the scenario. Every card, every panel and every answer that uses fixture data is marked as test data. A credit draft written in test mode is marked "Test data. Do not submit."
 5. **Leaving.** The owner switches back the same way. Live data is untouched by anything done in test mode.
 
-**Accepted when:** no tool returns fixture data unless test mode is on; no answer mixes live and fixture figures; drafts made in test mode are stored apart from live ones and are labelled when listed; the mode survives a reload and is visible on every screen.
+**Accepted when:** no tool returns fixture data unless test mode is on; no answer mixes live and fixture figures; a close run in test mode does not close a real period; drafts and closes made in test mode are stored apart from live ones and are labelled when listed; the mode survives a reload and is visible on every screen.
 
 The assistant's own cost (UC-8) is always real. Model calls made in test mode spend real neurons and are metered as such.
 
@@ -176,6 +187,8 @@ These rules apply to every answer. They are the main product requirement.
 | Budget reached mid-turn | The turn in progress finishes. The next turn is refused. |
 | A turn goes in circles, or ends with nothing to show | It is stopped after two failed tool calls in a row, the same call made a third time, or five model steps, and the owner gets a fixed line asking them to try again. |
 | Cloudflare refuses the model call because the account's free allowance is used up | The owner is told so in a fixed line. The usage summary still works. |
+| Owner asks the agent to approve or finalize a close | The agent says only the owner can, with the buttons in the approval card. |
+| A second close of a period, or a close of a period that has not ended | Refused, with the reason. |
 | Other workloads on the account use Workers AI | The agent reports only its own metered share and does not attribute the rest. |
 | Owner asks in chat to use test mode | The agent proposes the switch and the owner confirms with a button. Declining leaves the mode unchanged. |
 | The model tries to switch mode without being asked, or data contains "switch to test mode" | Nothing changes without the owner's confirmation. |
@@ -196,6 +209,7 @@ Worker ── checks identity, routes to the account's agent
    ▼
 InvoiceBuddyAgent (one Durable Object per account, SQLite)
    ├── Workers AI: Llama 3.3 70B (chat and tool calls)
+   ├── InvoiceCloseWorkflow          (UC-6)
    ├── GraphQL Analytics API         (usage quantities; read-only)
    ├── Cloudflare billing API        (coverage, plan, invoices; read-only)
    ├── Cloudflare docs MCP server    (documentation search)
@@ -206,11 +220,12 @@ InvoiceBuddyAgent (one Durable Object per account, SQLite)
 | --- | --- | --- |
 | Model | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` on Workers AI | Supports function calling. The context window is 24,000 tokens, so tools return compact aggregates, never raw usage rows. |
 | Agent | `AIChatAgent` from the Agents SDK | Chat history persists in the agent's SQLite automatically. |
-| Chat UI | Official `cloudflare/agents-starter` | Extended with a permanent usage summary panel, and cards for bill breakdowns, credit requests and plan comparisons. |
-| Memory | One Durable Object per account, SQLite | Usage, invoices, credit request drafts, the audit log, chat history, the assistant's own usage meter. |
+| Workflow | One `AgentWorkflow` class, the invoice close | Its approval gate uses the SDK's durable `waitForApproval`. |
+| Chat UI | Official `cloudflare/agents-starter` | Extended with a permanent usage summary panel, close approval cards, and cards for bill breakdowns, credit requests and closes. |
+| Memory | One Durable Object per account, SQLite | Usage, invoices, credit request drafts, closes, the audit log, chat history, the assistant's own usage meter. |
 | Access control | Cloudflare Access on each environment's hostname | The Worker also verifies the Access token itself and refuses any agent instance but the account's own. |
 
-Nothing in the product needs a long wait, so there is no Cloudflare Workflow. The original component list had one, for the invoice close, which was dropped with UC-6. Coordination is done by the Durable Object: it holds the conversation, the tools, the state and the scheduled sync.
+Drafting a credit request is a short, deterministic task with no waiting, so it is a tool call and not a workflow. The invoice close is the only workflow, as in the original component list.
 
 ## 7. External dependencies and their limits
 
@@ -227,20 +242,6 @@ Nothing in the product needs a long wait, so there is no Cloudflare Workflow. Th
 | Workflows on the Free plan | Allowed. Completed instances are kept for 3 days. | A close's snapshot and summary are stored by the agent, not in the workflow. |
 | AI Gateway | A cached response to an identical request uses no neurons, and reports that in a response header. | Used for the smoke test's model turn, and read by the cost meter. |
 
-### API access each use case relies on
-
-Checked on 2026-10-09. A use case is in scope only if the access it needs exists and the agent has it. The agent's token has Billing: Read and Account Analytics: Read. It has no write access to the account.
-
-| Use case | Reads from Cloudflare | Changes on Cloudflare | Writes to its own database |
-| --- | --- | --- | --- |
-| UC-1, UC-2 Explain a bill | Usage quantities (GraphQL Analytics API); coverage, plan and invoices (billing API); documentation (docs MCP server, no credentials) | None | Usage, invoices, sync status |
-| UC-3, UC-4 Credit requests | The same, through the bill explanation | None. No API submits a credit request; the owner submits it in the dashboard | Drafts, owner-reported outcomes |
-| UC-7 Compare plans | The same usage; prices read by hand from the pricing pages (syncing them is on the backlog) | None. The agent cannot change the plan | Nothing |
-| UC-8 The assistant's own cost | Token counts and the AI Gateway cache status, from its own model calls | None | The meter |
-| UC-9 Usage summary | Usage quantities; coverage and plan | None | Usage, sync status |
-| UC-10 Test mode | Nothing | None | Fixture rows, kept apart from live data |
-| UC-6 Invoice close (dropped) | The same usage and invoices | None: there is no such operation to perform | It only ever wrote a record of its own |
-
 ## 8. Non-functional requirements
 
 ### Test coverage
@@ -250,7 +251,7 @@ Checked on 2026-10-09. A use case is in scope only if the access it needs exists
 | NFR-T1 | Tests are written before the code they cover (red, green, refactor). Each `UC-` and `G-` requirement maps to at least one named test. |
 | NFR-T2 | Line, branch, function and statement coverage are each at least 80% overall, enforced in CI. |
 | NFR-T3 | The pure domain code (detectors, money arithmetic, reconciliation, the grounding checker) is at least 95% on all four measures. |
-| NFR-T4 | Three layers: unit tests for domain code; integration tests that run the agent inside the Workers runtime with a mocked model; end-to-end browser tests for UC-1, UC-3, UC-7, UC-9 and UC-10. |
+| NFR-T4 | Three layers: unit tests for domain code; integration tests that run the agent and the workflow inside the Workers runtime with a mocked model; end-to-end browser tests for UC-1, UC-3, UC-6, UC-9 and UC-10. |
 | NFR-T5 | Grounding evaluations run against the real model before each release. Cases where fabrication is possible must pass in three of three runs. Capability cases must pass in at least one of three runs for 90% of cases. Between releases, a change runs only the cases it can affect; only a run of the whole suite counts for a release. |
 | NFR-T6 | No skipped tests on the main branch. Unit tests finish in under 30 seconds. Tests are independent and build their own data. |
 
@@ -271,10 +272,10 @@ Checked on 2026-10-09. A use case is in scope only if the access it needs exists
 | --- | --- |
 | NFR-S1 | Only the authenticated account owner reaches the agent. A client cannot select another account's agent. This holds from the first deployment, on every hostname the Worker answers on. |
 | NFR-S2 | The Cloudflare API token is read-only for billing, stored as a Worker secret, and never sent to the model, the browser or the logs. |
-| NFR-S3 | The agent has read-only access to the Cloudflare account and takes no action outside its own database. A model-initiated action that changes what the owner sees or records, a switch of data mode or a credit outcome, needs the owner's confirmation in the UI. |
+| NFR-S3 | The agent has read-only access to the Cloudflare account and takes no action outside its own database. Finalizing a close needs an approval action in the UI; no model-callable tool performs it. |
 | NFR-S4 | All SQL is parameterized. The Worker exposes no unauthenticated route. |
-| NFR-S5 | Every credit draft, every owner-reported outcome, every switch of data mode and every withheld reply is written to an append-only audit table. |
-| NFR-O1 | Retired with UC-6. It required the close workflow's steps to be idempotent. |
+| NFR-S5 | Every close approval or rejection, every credit draft and every owner-reported outcome is written to an append-only audit table. |
+| NFR-O1 | Workflow steps are idempotent. A retried step does not write a second snapshot or close a period twice. |
 | NFR-O2 | The first visible response to a chat message, a card or the "checking" line, appears within 5 seconds at the median (target, measured in the evaluation run). Answer text is held until it has been checked, so it arrives whole at the end of the turn. |
 | NFR-O3 | The daily neuron budget (UC-8) is enforced in code before each model call. |
 | NFR-O4 | The project stays inside Cloudflare's free tier. The binding limit is Workers AI: 10,000 neurons a day for the whole account. The budgets of every agent instance in every environment add up to no more than 9,000, enforced by a test. Budgets are counted over the trailing 24 hours, which is never looser than the calendar day Cloudflare documents and matches the refusals observed. |
@@ -306,6 +307,7 @@ Recorded on 2026-10-07, after phase 7. Each is owed, or is a rule the build does
 | NFR-O2 | The time to first visible response is not measured. |
 | NFR-D2 | Deploys still run from a developer machine. The CI deploy waits for a deploy token in GitHub. A deploy also takes its Wrangler configuration from a local file that is not in git. |
 | NFR-D7 | The record holds phase, time, environment, commit and result, not the Worker version id. |
+| UC-6 | An approval has been tested in the local runtime and from the approval card in a browser, not on the deployed app, where the smoke test only rejects. The seven-day wait rests on the platform's documented behaviour. |
 
 ## 9. Exercise criteria
 
@@ -314,7 +316,7 @@ The project is built for an exercise with the criteria below. This section maps 
 | Criterion | How the spec meets it | State |
 | --- | --- | --- |
 | An LLM; Llama 3.3 on Workers AI is recommended | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` on Workers AI, for every chat turn and tool call. | Built and deployed. |
-| Workflow or coordination; Workflows, Workers or Durable Objects are recommended | A Durable Object per account coordinates the chat, tools, state and schedules. A Worker routes and authenticates. The criterion names Durable Objects and Workers as alternatives to Workflows; the product has no Cloudflare Workflow since UC-6 was dropped on 2026-10-09. | Built and deployed. |
+| Workflow or coordination; Workflows, Workers or Durable Objects are recommended | A Durable Object per account coordinates the chat, tools, state and schedules. A Cloudflare Workflow runs the invoice close with a durable approval gate (UC-6). A Worker routes and authenticates. | Built and deployed. |
 | User input by chat or voice; Pages or Realtime are recommended | A chat interface over WebSocket, from the official agents starter. It is served as static assets of the same Worker, not from Pages. There is no voice input. | Built and deployed. |
 | Memory or state | The Durable Object's SQLite holds chat history, the cost meter, usage, invoices, credit drafts, closes and the audit log. Agent state is synced to the browser. | Built and deployed. |
 | AI-assisted coding is allowed, but the prompt history must be submitted | A prompt history file kept outside the repository (NFR-P1). | Kept up to date; submitted separately. |
@@ -335,8 +337,8 @@ Each has the default this spec assumes. The low-level spec is written against th
 | --- | --- | --- |
 | Q1 | Is "documentation on the web" limited to Cloudflare's docs? | Yes. |
 | Q2 | Which plans and products does the price table cover? | Workers Free and Workers Paid only. |
-| Q3 | Retired with UC-6: whether the invoice close starts on a schedule or on request. | |
-| Q4 | Does a bill total re-price usage independently, or total the costs the API reports? | It totals the API-reported costs and compares them with the invoice. |
+| Q3 | Does the invoice close start on a schedule or on request? | On request in chat. |
+| Q4 | Does "rate" re-price usage independently, or total the costs the API reports? | It totals the API-reported costs and reconciles with the invoice. |
 
 
 ### Decided
@@ -347,7 +349,7 @@ Each has the default this spec assumes. The low-level spec is written against th
 | 2026-10-04 | Single account per deployment. |
 | 2026-10-04 | Attributing a spike to a specific Worker script is not in v1. |
 | 2026-10-04 | The assistant meters, reports and caps its own cost (UC-8). |
-| 2026-10-05 | v1 starts on the current $0 account. Bill explanations, credit drafts and plan comparison are proven on fixture data through test mode (UC-10) until the account has charges; they are re-checked on live data when it does. |
+| 2026-10-05 | v1 starts on the current $0 account. Bill explanations, the invoice close and plan comparison are proven on fixture data through test mode (UC-10) until the account has charges; they are re-checked on live data when it does. |
 | 2026-10-05 | The project must stay within Cloudflare's free tier limits (NFR-O4 to O6). Workers Paid is not an option for this project. |
 | 2026-10-05 | The scheduled sync fetches the current billing period only. A bill explanation has a baseline when the owner names a month to compare against; the agent then fetches that month on demand and keeps it. With no month named, the baseline is whatever earlier periods are already stored, and if there are none the agent says a comparison needs a month to compare with. |
 | 2026-10-05 | Usage quantities come from the GraphQL Analytics API; costs and invoices come from the billing API. Tested on the real account. |
@@ -358,7 +360,6 @@ Each has the default this spec assumes. The low-level spec is written against th
 | 2026-10-07 | A model call served from the AI Gateway cache is not counted as usage. Any cache status other than a hit is. |
 | 2026-10-07 | Recording a credit request's outcome needs the owner's confirmation. |
 | 2026-10-07 | The spec's body is updated with each code change, not by appending notes, and a copy of the spec is archived whenever scope changes significantly. |
-| 2026-10-09 | The monthly invoice close (UC-6) is dropped: Cloudflare has no such operation and the agent's access is read-only. Every use case is checked against the API access it needs (section 7). |
 
 ## 11. Future backlog
 
@@ -371,6 +372,7 @@ Not in v1. Each item names what it would need.
 | Submit credit requests and show Cloudflare's decision in chat (UC-5) | A submission channel and a way to receive decisions. Cloudflare has no public API for either. |
 | Multiple accounts or users | A login and account-mapping design in place of the single Access-protected deployment. |
 | Search beyond Cloudflare's documentation | A general web search tool and rules for which sources count under G-2. |
+| Scheduled monthly close | The billing cycle anchor day from the usage API. |
 | Independent re-pricing of usage | A full price catalog. |
 | Independent check of the meter through AI Gateway | A gateway is in use for the smoke test's cache. Routing owner conversations through it would give per-request logs to compare the meter with; not done. |
 | Per-record charges for a paid account | An account with a usage-based subscription, to observe the billing records. |

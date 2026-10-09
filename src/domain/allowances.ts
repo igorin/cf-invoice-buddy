@@ -15,7 +15,7 @@ export type Allowance = Readonly<{
 }>;
 
 export const ALLOWANCE_SOURCE = {
-  checkedOn: "2026-10-04",
+  checkedOn: "2026-10-07",
   urls: [
     "https://developers.cloudflare.com/workers/platform/pricing/",
     "https://developers.cloudflare.com/workers-ai/platform/pricing/",

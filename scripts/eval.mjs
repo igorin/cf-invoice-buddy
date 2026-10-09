@@ -12,11 +12,12 @@
 // allowance would be passed.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { CASES } from "../evals/cases.mjs";
+import { ALLOWED_URLS } from "../evals/allowed-links.mjs";
 import { checkGrounding } from "../src/domain/grounding.ts";
 import { UNVERIFIED_MESSAGE } from "../src/domain/verified-stream.ts";
 import { openAgent } from "./agent-client.mjs";
 import { selectCases } from "../evals/select.ts";
-import { fail, run } from "./lib.mjs";
+import { accountNeuronsLast24Hours, fail, run } from "./lib.mjs";
 
 const BASE_URL = process.env.EVAL_URL ?? "http://localhost:5173";
 const RUNS = 3;
@@ -24,9 +25,8 @@ const RUNS = 3;
 const TURN_NEURON_ESTIMATE = 200;
 // Capability cases must pass for this share of cases (spec NFR-T5).
 const CAPABILITY_PASS_SHARE = 0.9;
-const ALLOWED_URLS = [
-  "https://developers.cloudflare.com/support/contacting-cloudflare-support/"
-];
+// The account's free allowance, less a margin for the analytics' delay.
+const ACCOUNT_CEILING = 9_500;
 
 // Which cases to run. Every case costs model calls, so day-to-day runs take
 // only the cases a change affects; a release needs the whole suite.
@@ -114,6 +114,11 @@ async function runOnce(item) {
   if (budget.windowNeurons + TURN_NEURON_ESTIMATE > budget.dailyBudgetNeurons) {
     throw new Error("the instance's daily neuron budget would be passed");
   }
+  // The account's allowance is shared with everything else that runs on it.
+  const spent = budget.windowNeurons - startNeurons;
+  if (accountAtStart + spent + TURN_NEURON_ESTIMATE > ACCOUNT_CEILING) {
+    throw new Error("the account's free allowance would be passed");
+  }
   await agent.call(
     "setDataMode",
     item.scenario ? ["test", item.scenario] : ["live"]
@@ -142,6 +147,15 @@ async function runOnce(item) {
 }
 
 const startNeurons = meter().windowNeurons;
+let accountAtStart;
+try {
+  accountAtStart = await accountNeuronsLast24Hours();
+} catch (error) {
+  fail(`Not run: ${error.message}. No model call is made without that figure.`);
+}
+console.log(
+  `Account neurons in the last 24 hours: ${Math.round(accountAtStart).toLocaleString("en-US")} of 10,000 free. The run stops before ${ACCOUNT_CEILING.toLocaleString("en-US")}.`
+);
 const results = [];
 let stopped = null;
 

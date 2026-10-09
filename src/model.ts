@@ -5,6 +5,7 @@ import { withCacheStatus } from "./domain/cache-status";
 import { withDedupedStream } from "./domain/dedupe-stream";
 import { withRecording, type RecordedCall } from "./domain/model-recording";
 import { CHAT_MODEL_ID } from "./domain/models";
+import { scriptedBinding } from "./domain/scripted-model";
 
 export const MODEL_ID = CHAT_MODEL_ID;
 
@@ -23,6 +24,8 @@ export type ModelChoice = Readonly<{
   modelId: string;
   gateway?: Readonly<{ id: string; cacheTtl: number }>;
   record: boolean;
+  /** True when a fixed script answers in place of the model. Local only. */
+  scripted?: boolean;
 }>;
 
 /**
@@ -33,9 +36,14 @@ export type ModelChoice = Readonly<{
  */
 export function chooseModel(env: unknown, smoke: boolean): ModelChoice {
   const result = readConfig(env);
-  if (!smoke || !result.ok) return { modelId: MODEL_ID, record: false };
+  if (!result.ok) return { modelId: MODEL_ID, record: false };
   const config = result.config;
   const deployed = config.ENVIRONMENT !== "local";
+  // The browser tests run every instance on the script; see scripted-model.ts.
+  if (!deployed && config.SCRIPTED_MODEL === "1") {
+    return { modelId: MODEL_ID, record: false, scripted: true };
+  }
+  if (!smoke) return { modelId: MODEL_ID, record: false };
   return {
     modelId: config.SMOKE_MODEL_ID ?? MODEL_ID,
     ...(deployed && config.AI_GATEWAY_ID !== undefined
@@ -57,6 +65,10 @@ export function createModel(
   request: ModelRequest = { smoke: false }
 ): LanguageModel {
   const choice = chooseModel(env, request.smoke);
+  if (choice.scripted) {
+    const scripted = withDedupedStream(scriptedBinding()) as unknown as Ai;
+    return createWorkersAI({ binding: scripted })(choice.modelId);
+  }
   const recorded =
     choice.record && request.onRecordedCall
       ? withRecording(env.AI, request.onRecordedCall)

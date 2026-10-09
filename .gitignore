@@ -152,6 +152,8 @@ vite.config.ts.timestamp-*
 wrangler.jsonc
 wrangler.json
 wrangler.toml
+# Written by scripts/e2e-config.mjs for the browser tests.
+wrangler.e2e.jsonc
 
 # Cloudflare local secrets and tool state
 .dev.vars
