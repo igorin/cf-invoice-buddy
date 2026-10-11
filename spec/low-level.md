@@ -85,8 +85,8 @@ Variables, per environment:
 | Variable | Local | Staging | Production | Purpose |
 | --- | --- | --- | --- | --- |
 | `ENVIRONMENT` | `local` | `staging` | `production` | |
-| `DAILY_NEURON_BUDGET` | 100 | 100 | 400 | The owner instance's budget per 24 hours (section 12). |
-| `SMOKE_DAILY_NEURON_BUDGET` | 6,900 | 900 | 600 | The smoke-test instance's budget. The six add up to 9,000: 7,000 local, 1,000 staging, 1,000 production. Set this way on 2026-10-07 for the release, so that one full evaluation run, which needs about 4,800 to 6,700 neurons on the local smoke instance, fits in a day. The owner budgets are small in the meantime: about two chat turns a day in production. |
+| `DAILY_NEURON_BUDGET` | 100 | 100 | 100 | The owner instance's budget per 24 hours (section 12). |
+| `SMOKE_DAILY_NEURON_BUDGET` | 7,900 | 500 | 300 | The smoke-test instance's budget. The six add up to 9,000: 8,000 local, 600 staging, 400 production. Set this way on 2026-10-11 for the release: a full evaluation run, about 3,800 neurons, had to follow an earlier full run on the same day on the local smoke instance. The owner budgets are small in the meantime: less than one chat turn a day, so the budgets are to be set back after the release. |
 | `AUTH_MODE` | `dev` | `access` | `access` | Section 3. |
 | `AI_GATEWAY_ID`, `SMOKE_MODEL_ID` | not set | empty in the template | empty in the template | Optional, for cheaper testing (section 10). |
 | `SCRIPTED_MODEL` | set only by the browser tests | ignored | ignored | Section 10. |
