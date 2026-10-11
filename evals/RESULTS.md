@@ -2,7 +2,7 @@
 
 Evaluation runs call the real model, so they are run by hand: `npm run dev` in one terminal, `npm run eval` in another. Full output, including every reply, is written to `evals/results/`, which is not committed because replies quote the account's usage. This file is the committed summary.
 
-Gates (spec NFR-T5): every grounding case must pass three runs out of three; 90% of capability cases must pass at least one run in three. A grounding case stops at its first failed run, and a capability case at its first pass, to save model calls.
+Gates (spec NFR-T5), as changed on 2026-10-11: every grounding case is run three times and all three must count, where a run counts if its reply was shown and passed every check, or was withheld by the response checker; no more than one reply in ten may be withheld across the run; 90% of capability cases must pass at least one run in three. A grounding case stops at the first run that does not count, and a capability case at its first pass, to save model calls. Until 2026-10-11 a withheld reply failed its grounding case, and the runs below are reported as they were judged at the time.
 
 ## 2026-10-06: first run
 
@@ -92,6 +92,12 @@ One full run of the thirteen cases, on the code with every fix above and with th
 - Every other case passed: 20 of the 21 grounding turns, and all six capability cases on their first run.
 - The gate as written has not been passed in three attempts, and the reason is now only the model's variation. It requires every grounding turn to produce a correct, complete reply, 21 in a row. With the model slipping on roughly one turn in 25, a full run clears that about four times in ten, whatever the state of the code.
 
-**Open.** Whether the grounding gate should count a withheld reply as a failure. What the owner is protected from, an unverified figure or link on screen, did not happen in any run. A decision for the owner.
+**Decided by the owner, 2026-10-11.** A withheld reply counts as safe for a grounding case, and withheld replies are capped at one in ten across a run. The no-charges instruction also now tells the model to give no link.
+
+| Run | Cases | Grounding | Capability | Turns | Neurons | Withheld |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-11 19:35, `no-charges-to-explain` rerun | 1 | 1 of 1 | | 3 | 349 | 0 |
+
+Judged by the new gate, the 19:30 full run still does not pass, and rightly: under the old rule that case stopped after its first, withheld, run, so it has one run on record where the gate needs three. The rerun above gives it three of three with the new instruction. A full run under the new gate, on the code with that instruction, is the release result still owed.
  It could not be made on 2026-10-09: the two full runs and the reruns used about 5,900 of the local smoke instance's 6,900 neurons for 24 hours, and a full run needs about 4,500.
 

@@ -6,6 +6,7 @@ Copies of the spec at the points where its scope changed significantly, so the o
 | --- | --- |
 | [2026-10-04-original](2026-10-04-original/) | The spec as first committed, before any code (commit `075a20b`). |
 | [2026-10-07-before-merge](2026-10-07-before-merge/) | The spec after phase 7, when the design sections still described the original design and every difference was a dated note in section 14 of the low-level spec. |
+| [2026-10-11-before-gate-change](2026-10-11-before-gate-change/) | The spec when the release gate (NFR-T5) still failed a grounding case whose reply the response checker had withheld. Archived when the owner changed the gate to count a withheld reply as safe, capped at one in ten. |
 | [2026-10-09-before-dropping-invoice-close](2026-10-09-before-dropping-invoice-close/) | The spec with the monthly invoice close (UC-6) in it, as built: the workflow, its tools, the approval card and its tests. Archived when the owner dropped the use case. |
 
 On 2026-10-07 the body of the current spec was rewritten to describe what was built. The dated notes remain in its section 14 as a record.

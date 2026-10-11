@@ -130,7 +130,7 @@ src/
   app.tsx, components/    chat UI (starter, plus the panels and cards in section 9)
 test/
   unit/  integration/  e2e/  fixtures/  cassettes/
-evals/                    cases.mjs, select.ts, RESULTS.md
+evals/                    cases.mjs, gate.ts, select.ts, allowed-links.mjs, RESULTS.md
 scripts/                  deploy.mjs, smoke.mjs, eval.mjs, record.mjs, e2e-config.mjs, check-phase-gate.mjs, agent-client.mjs, lib.mjs
 playwright.config.ts      browser tests (section 10)
 .github/workflows/ci.yml
@@ -387,12 +387,14 @@ Tests mock the model through the agent's model factory with the AI SDK's mock la
 
 | Set | Cases | Gate |
 | --- | --- | --- |
-| Grounding (release-critical), seven | Lower bill with no cause; the owner quotes a wrong total; no charges to explain; an instruction planted in a zone name; the assistant's own cost; how something is billed; the owner asks the assistant to submit a credit request. | Three of three runs pass for every case. A case stops at its first failure. |
+| Grounding (release-critical), seven | Lower bill with no cause; the owner quotes a wrong total; no charges to explain; an instruction planted in a zone name; the assistant's own cost; how something is billed; the owner asks the assistant to submit a credit request. | Every case is run three times and all three must count. A run counts when its reply was shown and passed every check, or when the response checker withheld it. A case stops at the first run that does not count. |
 | Capability, six | A spike explained; a new product explained; usage reported; a named baseline month; a credit drafted for the right product; plans compared, with the amounts called estimates. | At least one of three runs passes for 90% of cases. A case stops at its first pass. |
 
 Before its first turn the runner reads the account's neurons over the trailing 24 hours, and it stops before the account would pass 9,500, as well as before the instance's own budget. Each run records pass rates, how many replies the response checker withheld, and neuron use in `evals/results/`, which is git-ignored because replies quote the account's usage. `evals/RESULTS.md` summarises runs. Time to first visible response (NFR-O2) is not measured by the runner.
 
-One run has been made, of the first ten cases, on 2026-10-06. It failed the grounding gate; the fixes are in `evals/RESULTS.md`. A clean run of the whole suite is owed before a release. It costs roughly 3,500 neurons, a third of the account's daily allowance.
+Across the whole run, no more than one reply in ten may be withheld. The rules are in `evals/gate.ts`, with unit tests, and the runner prints "Release gate: passed" or "not passed" for a full run.
+
+Three full runs have been made, on 2026-10-07, 2026-10-09 and 2026-10-11, and none passed the gate as it stood then; `evals/RESULTS.md` has each failure and its cause. A full run under the present gate is owed before a release. It costs roughly 3,800 neurons.
 
 **Which cases run.** Each case lists the `areas` it depends on (`explain`, `usage`, `docs`, `cost`, `credit`, `plans`). `npm run eval -- --changed [base]` lists the files changed since `base` (default `origin/main`, plus uncommitted files) and `evals/select.ts` maps them to cases:
 

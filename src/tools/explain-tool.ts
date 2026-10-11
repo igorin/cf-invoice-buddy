@@ -14,7 +14,7 @@ const INSTRUCTION: Record<ExplanationView["outcome"], string> = {
   no_baseline:
     "There is nothing to compare with. Give the figures for the month and ask the owner which month to compare against. Do not describe the bill as higher or lower than usual.",
   no_charges:
-    "Say there are no charges to explain, and that the usage summary shows what was used."
+    "Say there are no charges to explain, and that the usage summary shows what was used. Give no link."
 };
 
 export function describeForModel(view: ExplanationView) {
