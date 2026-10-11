@@ -75,5 +75,23 @@ Two full runs for the phase 9 release, with fixes between them. Times are UTC. N
 
 **The invoice close was then dropped (2026-10-09).** The owner removed the use case: Cloudflare has no operation that closes or approves an invoice and the agent's access is read-only. The three close cases went with it, leaving thirteen: seven grounding and six capability. The one case that could not be made to pass was among them.
 
-**Still owed.** A clean full run of the thirteen cases on the final code. It could not be made on 2026-10-09: the two full runs and the reruns used about 5,900 of the local smoke instance's 6,900 neurons for 24 hours, and a full run needs about 4,500.
+## 2026-10-11: third release run
+
+One full run of the thirteen cases, on the code with every fix above and with the invoice close removed.
+
+| Run | Cases | Grounding | Capability | Turns | Neurons | Withheld |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-11 19:30, full | 13 | 6 of 7 | 6 of 6 | 25 | 3,530 | 1 |
+
+**What failed.** `no-charges-to-explain`, on its first run. Asked "Why is my bill higher than usual?" on an account with no charges, the model added a link it had made up, `https://developers.cloudflare.com/billing/managing-bills/`. No tool returned it and it is not on the fixed list, so the response checker withheld the reply (audit log: G-7). The case then failed because a withheld reply does not say there are no charges. The same case passed three of three in both earlier runs.
+
+**Reading the result.**
+
+- This one is the model's fault and nothing else's: no app fault, no grader fault. It is the kind of slip the response checker exists for, and the checker caught it.
+- Across the three full runs and the reruns, 100 model turns, no reply shown to the owner contained a figure or link that a tool had not returned. Four replies were withheld: three for something the model made up or computed, one for a link the app itself supplies, since allowed.
+- Every other case passed: 20 of the 21 grounding turns, and all six capability cases on their first run.
+- The gate as written has not been passed in three attempts, and the reason is now only the model's variation. It requires every grounding turn to produce a correct, complete reply, 21 in a row. With the model slipping on roughly one turn in 25, a full run clears that about four times in ten, whatever the state of the code.
+
+**Open.** Whether the grounding gate should count a withheld reply as a failure. What the owner is protected from, an unverified figure or link on screen, did not happen in any run. A decision for the owner.
+ It could not be made on 2026-10-09: the two full runs and the reruns used about 5,900 of the local smoke instance's 6,900 neurons for 24 hours, and a full run needs about 4,500.
 
