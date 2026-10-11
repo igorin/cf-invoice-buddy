@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | Describes the product as built through phase 8. The release work of phase 9 is planned. |
+| Status | Describes the product as released on 2026-10-11. |
 | Last updated | 2026-10-07 |
 | Companion | [low-level.md](low-level.md) |
 | Original | [archived/2026-10-04-original/high-level.md](archived/2026-10-04-original/high-level.md), written before any code. The differences are listed in [archived/README.md](archived/README.md). |

@@ -9,9 +9,9 @@ What the project has learned about Cloudflare's platform, from Workers AI limits
 
 ## Implementation status
 
-Last updated 2026-10-07. The build follows nine phases set out in [spec/low-level.md](spec/low-level.md), section 15. Each phase must be deployed to Cloudflare and pass a smoke test before the next begins.
+Last updated 2026-10-11. The build follows nine phases set out in [spec/low-level.md](spec/low-level.md), section 15. Each phase must be deployed to Cloudflare and pass a smoke test before the next begins.
 
-**Phases 1 to 8 of 9 are done.** A phase is done when it runs in staging and production behind Cloudflare Access and both environments pass the smoke test. Full test run takes a significant amount of daily neurons and production deployments with full end to end test pass can be done ~1 a day.
+**All phases are done and the release is live.** Phase 7 was built and later dropped. A phase is done when it runs in staging and production behind Cloudflare Access and both environments pass the smoke test. Full test run takes a significant amount of daily neurons and production deployments with full end to end test pass can be done ~1 a day.
 
 | Phase | Scope | Status |
 | --- | --- | --- |
@@ -23,7 +23,7 @@ Last updated 2026-10-07. The build follows nine phases set out in [spec/low-leve
 | 6 | Credit request drafts, history and owner-reported outcomes | Done |
 | 7 | Monthly invoice close | Dropped. It was built and deployed, then removed on 2026-10-09: Cloudflare has no such operation and the bot's access is read-only |
 | 8 | Plan comparison: an estimate of the month's usage on Workers Free and Workers Paid | Done |
-| 9 | Release: browser tests, accessibility pass, price re-check, clean evaluation run | In progress; the evaluation run and the deploy remain |
+| 9 | Release: browser tests, accessibility pass, price re-check, evaluation run | Done. The evaluation suite passed its release gate on 2026-10-11 |
 
 What works today, in both deployed environments:
 

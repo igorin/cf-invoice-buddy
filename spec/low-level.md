@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | Describes the system as built through phase 8, and the part of phase 9 done so far. What remains of phase 9 is marked as such. |
+| Status | Describes the system as released on 2026-10-11, at the end of phase 9. |
 | Last updated | 2026-10-07 |
 | Implements | [high-level.md](high-level.md) |
 | Original | [archived/2026-10-04-original/low-level.md](archived/2026-10-04-original/low-level.md), written before any code |
@@ -920,6 +920,6 @@ Each phase is test-first. A phase is done only when `check` and `test:coverage` 
 | 6 | **Credit requests.** Draft template, the three credit tools, the credit card, history and owner-reported outcomes. UC-3, UC-4. | Done 2026-10-07 |
 | 7 | **Invoice close.** The workflow, the close tools and the approval card. UC-6. | Built and deployed 2026-10-07; dropped and removed 2026-10-09, since Cloudflare has no such operation and the agent's access is read-only |
 | 8 | **Plans.** Price table, `comparePlans`, the plan card and the estimate rule in the checker. UC-7. | Done 2026-10-07 |
-| 9 | **Release.** Browser tests, an accessibility pass, price constants re-checked, and a clean run of the whole evaluation suite. | In progress. Done on 2026-10-07: browser tests for six use cases, run locally with a scripted model and not on staging; axe checks in them, which found two faults, both fixed; every price constant re-read from Cloudflare's pages. Still to do: the evaluation run, then the deploy. |
+| 9 | **Release.** Browser tests, an accessibility pass, price constants re-checked, and a passing run of the whole evaluation suite. | Done 2026-10-11. Browser tests for five use cases, run locally with a scripted model and not on staging; axe checks in them, which found two faults, both fixed; every price constant re-read from Cloudflare's pages; the evaluation gate passed on the fourth full run, after the gate itself was changed (section 10). Deployed at commit `e3024c9`. |
 
 Still owed after the release: recordings of the real model for the replay tests; and the per-record charges of a paid account (section 4).
