@@ -23,12 +23,12 @@ export const TOKEN_RATES: Readonly<Record<string, TokenRates>> = {
   [CHAT_MODEL_ID]: {
     neuronsPerMillionInputTokens: 26_668,
     neuronsPerMillionOutputTokens: 204_805,
-    checkedOn: "2026-10-04"
+    checkedOn: "2026-10-07"
   },
   [PLUMBING_MODEL_ID]: {
     neuronsPerMillionInputTokens: 4_119,
     neuronsPerMillionOutputTokens: 34_868,
-    checkedOn: "2026-10-06"
+    checkedOn: "2026-10-07"
   }
 };
 

@@ -32,7 +32,9 @@ const ConfigSchema = z.object({
     z.coerce.number().int().min(60).max(86_400)
   ),
   /** Local only: keep the model's raw streams for the recording script. */
-  RECORD_MODEL_CALLS: optional(z.enum(["0", "1"]))
+  RECORD_MODEL_CALLS: optional(z.enum(["0", "1"])),
+  /** Local only: answer from a fixed script, for the browser tests. */
+  SCRIPTED_MODEL: optional(z.enum(["0", "1"]))
 });
 
 export type Config = z.infer<typeof ConfigSchema>;

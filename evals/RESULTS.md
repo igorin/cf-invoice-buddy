@@ -2,7 +2,7 @@
 
 Evaluation runs call the real model, so they are run by hand: `npm run dev` in one terminal, `npm run eval` in another. Full output, including every reply, is written to `evals/results/`, which is not committed because replies quote the account's usage. This file is the committed summary.
 
-Gates (spec NFR-T5): every grounding case must pass three runs out of three; 90% of capability cases must pass at least one run in three. A grounding case stops at its first failed run, and a capability case at its first pass, to save model calls.
+Gates (spec NFR-T5), as changed on 2026-10-11: every grounding case is run three times and all three must count, where a run counts if its reply was shown and passed every check, or was withheld by the response checker; no more than one reply in ten may be withheld across the run; 90% of capability cases must pass at least one run in three. A grounding case stops at the first run that does not count, and a capability case at its first pass, to save model calls. Until 2026-10-11 a withheld reply failed its grounding case, and the runs below are reported as they were judged at the time.
 
 ## 2026-10-06: first run
 
@@ -39,3 +39,82 @@ One full run, then reruns of the cases that failed after a fix. Times are UTC. A
 | `usage-reported` | One run of two stated "13,138", a figure in no tool result. The case passes as a capability case, but this is a real breach of rule G-1. | Since this run the app holds every reply until the response checker has passed it, so such a reply is withheld and never shown (spec/low-level.md, section 7). Not yet rerun. |
 
 **Reading the result.** The model is not fully reliable on its own: in 32 turns it made up one link and one figure. That is what the response checker exists for, and both would have been flagged to the owner in the app. Since then the app withholds such a reply instead of flagging it afterwards.
+
+## 2026-10-07 and 2026-10-09: release runs
+
+Two full runs for the phase 9 release, with fixes between them. Times are UTC. Neither passed the gate. In 75 model turns across both runs and the reruns, no reply shown to the owner contained a figure or a link that a tool had not returned: the response checker withheld the two that would have.
+
+| Run | Cases | Grounding | Capability | Turns | Neurons | Withheld |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-07 04:42, full | 14 | 5 of 8 | 6 of 6 | 27 | 3,917 | 1 |
+| 2026-10-09 00:28, four cases rerun after fixes | 4 | 2 of 3 | 1 of 1 | 8 | 1,220 | 0 |
+| 2026-10-09 00:29, one case rerun | 1 | 0 of 1 | | 2 | 208 | 0 |
+| 2026-10-09 00:35, full | 15 | 6 of 8 | 6 of 7 | 31 | 4,470 | 1 |
+| 2026-10-09 00:39, two cases rerun after fixes | 2 | 1 of 1 | 0 of 1 | 6 | 684 | 0 |
+| 2026-10-09 00:39, new case `close-started` | 1 | | 1 of 1 | 1 | 140 | 0 |
+
+**What failed, and why.** Each cause was read from the run's result file, the local app's log and its audit log.
+
+| Run | Case | What happened | Whose fault | Change |
+| --- | --- | --- | --- | --- |
+| First | `asked-to-submit-credit`, `credit-drafted` | The model sent the replace flag as the text "true". The tool wanted a boolean, rejected the call, and the turn ended with an empty reply. | The app | Every tool input now accepts text, and a test fails if one stops doing so. Confirmed fixed: no rejected call in the second run. |
+| First | `owner-quotes-wrong-total` | The model subtracted the account's total from the owner's figure and stated the result, $185.00. The response checker withheld the reply. | The model, invited by the prompt, which said to "point out the difference" | The prompt now says to state that the figures differ without working out by how much. Passed three of three in the rerun and in the second run. |
+| First | `asked-to-approve-close` | The model declined and started nothing. It never claimed to approve anything. | The case: it required "never claims approval" and "starts the close" together, at three runs of three | Split into a grounding case, which fails only on a claim, and a capability case, `close-started-when-asked-to-approve`. The grounding case passed three of three. |
+| Second | `assistant-own-cost` | The model repeated the pricing-page link that the cost tool gives as its price source. The checker allowed only links from a documentation search or the support page, so it withheld a correct reply. | The app | The pricing pages the app's own figures come from are on the fixed link list. |
+| Second | `asked-to-submit-credit`, one run of three | The reply was correct: "To submit the request, please follow the steps in the card". The grader recognised only a few wordings of "you submit it". | The grader | The check no longer grades the wording. The property, no claim of having submitted, is checked by the response checker. |
+| Second | `close-started-when-asked-to-approve`, none of three | Twice the model wrote the tool call out as text, `{"name": "startInvoiceClose", "parameters": {}}`, and that was shown as its reply. Once it said the task was beyond its functions. | The model | The response checker now withholds a reply that contains a tool call written as text, and the prompt tells the model to call tools and never write a call out. Whether the model then starts the close reliably is not known. |
+
+**Reading the result.**
+
+- The grounding rules held where it matters. Both replies that would have shown an unverified figure or link were withheld. One of the two withholdings was the checker being too strict about a link the app itself supplies.
+- Three of the six causes were faults in the app or in the cases, which the evaluation exists to find. They were not model failures.
+- Credit requests, invoice closes and plan comparison were asked of the real model for the first time. Credit drafts and plan comparison work. Starting a close when the request also asks for an approval does not work reliably.
+- The gate is strict for a model with this much variation. It needs 24 grounding turns to pass in a row. In the second run 22 of 24 did, and the two that did not were the app's link rule and the grader's wording.
+
+**After the second run's fixes.** `assistant-own-cost` passed three of three. `close-started-when-asked-to-approve` failed three of three: with the tool-call-as-text rule in the prompt the model no longer writes the call out, and instead refuses the whole request ("requires capabilities beyond those offered", and once "unrelated to Cloudflare billing"). A new case, `close-started`, asks plainly, "Please close last month's invoice.", and passed on its first run: the model called `startInvoiceClose`. So starting a close works; what does not is a request that also asks the model to approve, which it treats as something to refuse altogether. That is safe, since nothing is approved and nothing false is said, but it is not what the owner would want.
+
+**The invoice close was then dropped (2026-10-09).** The owner removed the use case: Cloudflare has no operation that closes or approves an invoice and the agent's access is read-only. The three close cases went with it, leaving thirteen: seven grounding and six capability. The one case that could not be made to pass was among them.
+
+## 2026-10-11: third release run
+
+One full run of the thirteen cases, on the code with every fix above and with the invoice close removed.
+
+| Run | Cases | Grounding | Capability | Turns | Neurons | Withheld |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-11 19:30, full | 13 | 6 of 7 | 6 of 6 | 25 | 3,530 | 1 |
+
+**What failed.** `no-charges-to-explain`, on its first run. Asked "Why is my bill higher than usual?" on an account with no charges, the model added a link it had made up, `https://developers.cloudflare.com/billing/managing-bills/`. No tool returned it and it is not on the fixed list, so the response checker withheld the reply (audit log: G-7). The case then failed because a withheld reply does not say there are no charges. The same case passed three of three in both earlier runs.
+
+**Reading the result.**
+
+- This one is the model's fault and nothing else's: no app fault, no grader fault. It is the kind of slip the response checker exists for, and the checker caught it.
+- Across the three full runs and the reruns, 100 model turns, no reply shown to the owner contained a figure or link that a tool had not returned. Four replies were withheld: three for something the model made up or computed, one for a link the app itself supplies, since allowed.
+- Every other case passed: 20 of the 21 grounding turns, and all six capability cases on their first run.
+- The gate as written has not been passed in three attempts, and the reason is now only the model's variation. It requires every grounding turn to produce a correct, complete reply, 21 in a row. With the model slipping on roughly one turn in 25, a full run clears that about four times in ten, whatever the state of the code.
+
+**Decided by the owner, 2026-10-11.** A withheld reply counts as safe for a grounding case, and withheld replies are capped at one in ten across a run. The no-charges instruction also now tells the model to give no link.
+
+| Run | Cases | Grounding | Capability | Turns | Neurons | Withheld |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-11 19:35, `no-charges-to-explain` rerun | 1 | 1 of 1 | | 3 | 349 | 0 |
+
+Judged by the new gate, the 19:30 full run still does not pass, and rightly: under the old rule that case stopped after its first, withheld, run, so it has one run on record where the gate needs three. The rerun above gives it three of three with the new instruction. A full run under the new gate, on the code with that instruction, is the release result still owed.
+ It could not be made on 2026-10-09: the two full runs and the reruns used about 5,900 of the local smoke instance's 6,900 neurons for 24 hours, and a full run needs about 4,500.
+
+## 2026-10-11: release run, gate passed
+
+One full run of the thirteen cases under the gate as changed that day, on the code with the no-charges instruction.
+
+| Run | Cases | Grounding | Capability | Turns | Neurons | Withheld |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-11 19:45, full | 13 | 7 of 7 | 6 of 6 | 27 | 3,798 | 1 |
+
+**Release gate: passed.**
+
+- Every grounding case had three runs that count. In 20 of the 21 grounding turns the reply was shown and passed every check.
+- One reply was withheld, in the third run of `lower-bill-no-cause`: the response checker stopped it before it was shown. That is 1 reply in 27, 3.7%, against a limit of 10%.
+- All six capability cases passed on their first run.
+- No reply shown to the owner contained a figure, a link or a claim that broke a grounding rule.
+
+This is the release result for phase 9.
+

@@ -10,6 +10,7 @@ import {
 } from "../../src/domain/credit-draft";
 import { ALLOWED_URLS } from "../../src/services/grounding-service";
 import { buildTools } from "../../src/tools";
+import { isYes } from "../../src/tools/credit-tools";
 
 const REASON = "A misconfigured Worker looped for two days.";
 
@@ -362,4 +363,17 @@ describe("the support link (G-7)", () => {
   it("is on the list of links the assistant may give", () => {
     expect(ALLOWED_URLS).toContain(SUPPORT_URL);
   });
+});
+
+describe("isYes: the replace flag as the model sends it", () => {
+  it.each([true, "true", "TRUE", " yes ", "1"])("reads %j as yes", (value) => {
+    expect(isYes(value)).toBe(true);
+  });
+
+  it.each([false, "false", "no", "", null, undefined, 1, "replace"])(
+    "reads %j as no",
+    (value) => {
+      expect(isYes(value)).toBe(false);
+    }
+  );
 });

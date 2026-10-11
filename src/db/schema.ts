@@ -141,8 +141,9 @@ export const MIGRATIONS: ReadonlyArray<{
     ]
   },
   {
-    // Invoice closes (UC-6): one row per period and dataset, holding the
-    // frozen usage and the summary the owner approves.
+    // Retired. Invoice closes (UC-6) were dropped on 2026-10-09; nothing
+    // reads or writes this table. The migration stays because it has been
+    // deployed, and a deployed migration is never edited or removed.
     id: 7,
     statements: [
       `CREATE TABLE IF NOT EXISTS invoice_closes (

@@ -4,14 +4,7 @@
  * that use it. A file this list does not know runs every case.
  */
 
-export type Area =
-  | "explain"
-  | "usage"
-  | "docs"
-  | "cost"
-  | "credit"
-  | "close"
-  | "plans";
+export type Area = "explain" | "usage" | "docs" | "cost" | "credit" | "plans";
 
 /** Files that cannot change what the model is sent or how a reply is graded. */
 const NO_EFFECT: ReadonlyArray<RegExp> = [
@@ -48,13 +41,6 @@ const AREA_FILES: Readonly<Record<Area, ReadonlyArray<RegExp>>> = {
     /^src\/db\/credit-store\.ts$/
   ],
   cost: [/^src\/db\/self-usage-store\.ts$/, /^src\/domain\/self-cost\.ts$/],
-  close: [
-    /^src\/tools\/close-tools\.ts$/,
-    /^src\/services\/close-service\.ts$/,
-    /^src\/domain\/close\.ts$/,
-    /^src\/db\/close-store\.ts$/,
-    /^src\/workflows\/invoice-close\.ts$/
-  ],
   plans: [
     /^src\/tools\/plan-tool\.ts$/,
     /^src\/services\/plan-service\.ts$/,

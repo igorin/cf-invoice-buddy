@@ -4,7 +4,6 @@ import { useAgentChat } from "@cloudflare/ai-chat/react";
 import { getToolName, isToolUIPart, type UIMessage } from "ai";
 import type { AgentState, InvoiceBuddyAgent } from "./agent";
 import { BreakdownCard, CostFooter } from "./components/breakdown-card";
-import { ApprovalCards, CloseCard, hasClose } from "./components/close-card";
 import { CreditCard, hasCreditDraft } from "./components/credit-card";
 import { PlanCard, hasPlanComparison } from "./components/plan-card";
 import {
@@ -123,8 +122,6 @@ const CREDIT_TOOLS = new Set([
   "recordCreditOutcome"
 ]);
 
-const CLOSE_TOOLS = new Set(["startInvoiceClose", "getInvoiceCloses"]);
-
 function ToolPartView({
   part,
   addToolApprovalResponse
@@ -153,19 +150,6 @@ function ToolPartView({
     if (hasCreditDraft(part.output)) {
       return <div className="flex justify-start">{card}</div>;
     }
-  }
-
-  // So are invoice closes (UC-6). Approval is not here: see ApprovalCards.
-  if (
-    part.state === "output-available" &&
-    CLOSE_TOOLS.has(toolName) &&
-    hasClose(part.output)
-  ) {
-    return (
-      <div className="flex justify-start">
-        <CloseCard output={part.output} />
-      </div>
-    );
   }
 
   // A plan comparison is shown as a card (UC-7).
@@ -509,10 +493,15 @@ function Chat({ accountId }: { accountId: string }) {
 
       {agentState && <TestModeBanner mode={agentState.dataMode} />}
       <UsagePanel state={agentState} calls={agent.stub} connected={connected} />
-      <ApprovalCards state={agentState} calls={agent.stub} />
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto">
+      {/* Focusable, so the conversation can be scrolled from the keyboard. */}
+      <section
+        aria-label="Conversation"
+        // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+        tabIndex={0}
+        className="flex-1 overflow-y-auto"
+      >
         <div className="max-w-3xl mx-auto px-5 py-6 space-y-5">
           {messages.length === 0 && (
             <Empty
@@ -668,7 +657,7 @@ function Chat({ accountId }: { accountId: string }) {
 
           <div ref={messagesEndRef} />
         </div>
-      </div>
+      </section>
 
       {/* Input */}
       <div className="border-t border-kumo-line bg-kumo-base">

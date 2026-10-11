@@ -111,6 +111,8 @@ Neurons per million tokens, from the pricing page:
 
 ## Workflows
 
+This project used one Workflow, for an invoice close, from 2026-10-07 until the use case was dropped on 2026-10-09. The notes stay because they are true of the platform.
+
 - **Documented**: Workflows run on Workers Free. Limits there: 1,024 steps per instance, 100,000 executions a day shared with the Workers request limit, 100 concurrent running instances (waiting ones do not count), state of completed instances kept for 3 days, instance ids up to 100 characters matching `^[a-zA-Z0-9_][a-zA-Z0-9-_]*$`. Keep anything you need for longer in your own storage.
 - **Observed (2026-10-07, local test runtime and deployed on Workers Free)**: an `AgentWorkflow` started with `this.runWorkflow(binding, params, { id })` runs its `step.do` steps, calls the agent's public methods through `this.agent`, waits in `waitForApproval`, and resumes after `approveWorkflow` or throws after `rejectWorkflow`. The wrangler entry is `"workflows": [{ "name", "binding", "class_name" }]`, per environment, and the class must be exported from the Worker's entry file.
 - **Observed**: a rejection is recognised by `error.name === "WorkflowRejectedError"`; a timeout of the wait is a different error. The SDK also reports a rejection to the agent as a workflow error, so `onWorkflowError` runs after `rejectWorkflow`: do not let it overwrite a rejection.

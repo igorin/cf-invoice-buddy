@@ -23,7 +23,8 @@ function capTo(delta: number, claimed: number): number {
  * Service findings (spike, drop, new, removed) are counted per service, each
  * capped at that service's change. Zone findings describe the same dollars
  * from another angle, so they are not added on top: whichever view explains
- * more of the change is used.
+ * more of the change is used. A period-length finding is about the whole
+ * account and is counted against whatever those leave.
  */
 export function unexplained(
   deltaMicros: Micros,
@@ -45,5 +46,14 @@ export function unexplained(
       .reduce((n, f) => n + f.impactMicros, 0)
   );
   const explained = Math.abs(byZone) > Math.abs(byService) ? byZone : byService;
-  return micros(deltaMicros - explained);
+  // A period of a different length changes the total without changing any
+  // product's daily usage, so it is counted against what is left.
+  const remaining = deltaMicros - explained;
+  const byLength = capTo(
+    remaining,
+    findings
+      .filter((f) => f.detector === "period-length")
+      .reduce((n, f) => n + f.impactMicros, 0)
+  );
+  return micros(remaining - byLength);
 }

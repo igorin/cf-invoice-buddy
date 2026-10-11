@@ -99,7 +99,8 @@ function Allowance({ row }: { row: UsageSummaryView["rows"][number] }) {
       <progress
         className={`w-full h-1.5 ${warn ? "accent-amber-600" : "accent-emerald-600"}`}
         max={100}
-        value={percent}
+        value={Number(percent.toFixed(1))}
+        aria-valuetext={`${percent.toFixed(1)}%`}
         aria-label={`${row.service} ${row.metric}: ${percent.toFixed(1)}% of the included allowance used`}
       />
     </div>
@@ -223,7 +224,9 @@ export function UsagePanel({
   return (
     <section
       aria-labelledby="usage-summary-heading"
-      className="px-5 py-3 bg-kumo-base border-b border-kumo-line"
+      // Never taller than about two fifths of the window, so the chat below
+      // always has room; a long summary scrolls.
+      className="px-5 py-3 bg-kumo-base border-b border-kumo-line max-h-[40vh] overflow-y-auto shrink-0"
     >
       <details open className="max-w-3xl mx-auto">
         <summary

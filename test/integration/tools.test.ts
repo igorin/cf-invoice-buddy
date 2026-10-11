@@ -3,6 +3,7 @@ import { runInDurableObject } from "cloudflare:test";
 import { getAgentByName } from "agents";
 import type { UIMessage } from "ai";
 import { afterEach, describe, expect, it } from "vitest";
+import { z } from "zod";
 import { InvoiceBuddyAgent } from "../../src/agent";
 import { CANNOT_EXPLAIN, SPECULATION_LABEL } from "../../src/domain/grounding";
 import type { TurnForReview } from "../../src/domain/verified-stream";
@@ -201,5 +202,29 @@ describe("reviewTurn: the checker over a turn (spec section 7)", () => {
 
   it("copes with a reply that has no tool results and no owner message", () => {
     expect(reviewTurn(reply("Hello.", []), [])).toEqual([]);
+  });
+});
+
+describe("tool input schemas", () => {
+  // The model sends true, false and numbers as text at times. A schema that
+  // insists on the exact type rejects the call and the turn ends with nothing
+  // to show, which failed two cases of the release evaluation.
+  it("accept text for every input, so a call is never rejected for its type alone", async () => {
+    const stub = await getAgentByName(env.InvoiceBuddyAgent, "tool-schemas");
+    const strict = await runInDurableObject(
+      stub,
+      async (agent: InvoiceBuddyAgent) =>
+        Object.entries(buildTools(agent)).flatMap(([name, tool]) => {
+          const schema = z.toJSONSchema(tool.inputSchema as z.ZodType) as {
+            properties?: Record<string, unknown>;
+          };
+          return Object.entries(schema.properties ?? {})
+            .filter(
+              ([, property]) => !JSON.stringify(property).includes('"string"')
+            )
+            .map(([key]) => `${name}.${key}`);
+        })
+    );
+    expect(strict).toEqual([]);
   });
 });

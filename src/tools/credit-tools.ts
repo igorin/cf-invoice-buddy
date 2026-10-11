@@ -15,6 +15,11 @@ import { MONTH_PATTERN } from "../services/explain-service";
  * waits for the owner's approval, because it stores the owner's word.
  */
 
+/** True for true, and for the text forms a model sends in its place. */
+export const isYes = (value: unknown): boolean =>
+  value === true ||
+  (typeof value === "string" && /^(true|yes|1)$/i.test(value.trim()));
+
 const NEVER_SUBMITS =
   "You cannot submit it and must never say it was or will be submitted by you.";
 
@@ -110,8 +115,9 @@ export function buildCreditTools(agent: InvoiceBuddyAgent) {
         service: z.string().describe("Product name as on the bill."),
         ownerReason: z.string().describe("The owner's reason, in their words."),
         month: z.string().nullish().describe("YYYY-MM. Omit for this month."),
+        // The model sends this as text ("true") as often as not.
         replaceExisting: z
-          .boolean()
+          .union([z.boolean(), z.string()])
           .nullish()
           .describe("True only if the owner asked to replace the draft.")
       }),
@@ -121,7 +127,7 @@ export function buildCreditTools(agent: InvoiceBuddyAgent) {
           await agent.draftCreditRequest({
             service,
             ownerReason,
-            replaceExisting: replaceExisting === true,
+            replaceExisting: isYes(replaceExisting),
             ...(named && MONTH_PATTERN.test(named) ? { month: named } : {})
           })
         );

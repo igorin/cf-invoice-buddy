@@ -1,7 +1,9 @@
 # cf-invoice-buddy
-Experimental AI bot that runs on Cloudflare and explains why the invoice is what it is.
+AI bot for Cloudflare that runs on Workers AI and helps with understanding user invoice context and do a what-if plan comparison.
 
 Specs are in [spec/](spec/).
+
+The bot has read-only access to the account: it reads usage and billing data and changes nothing on Cloudflare.
 
 What the project has learned about Cloudflare's platform, from Workers AI limits and stream quirks to AI Gateway caching, the usage APIs and Workflows, is kept in a skill file for coding agents: [.claude/skills/cloudflare-platform-notes/SKILL.md](.claude/skills/cloudflare-platform-notes/SKILL.md). It is worth reading for people too. [AGENTS.md](AGENTS.md) tells agents when to use it.
 
@@ -19,9 +21,9 @@ Last updated 2026-10-07. The build follows nine phases set out in [spec/low-leve
 | 4 | Bill explanations and the assistant's cost report | Done |
 | 5 | Documentation search and grounding checks, with each reply held until it is checked | Done |
 | 6 | Credit request drafts, history and owner-reported outcomes | Done |
-| 7 | Monthly invoice close, run as a Workflow with an owner approval gate | Done |
+| 7 | Monthly invoice close | Dropped. It was built and deployed, then removed on 2026-10-09: Cloudflare has no such operation and the bot's access is read-only |
 | 8 | Plan comparison: an estimate of the month's usage on Workers Free and Workers Paid | Done |
-| 9 | Release | Not started |
+| 9 | Release: browser tests, accessibility pass, price re-check, clean evaluation run | In progress; the evaluation run and the deploy remain |
 
 What works today, in both deployed environments:
 
@@ -29,7 +31,6 @@ What works today, in both deployed environments:
 - **Usage summary.** A panel that is always on screen: what each product used this period, against its included allowance, and what was billed. It works on an account with a $0 bill.
 - **Bill explanations.** A month's bill against a baseline, per product and per day, with causes stated only when a detector found them in the account's data or a Cloudflare documentation page describes them. When neither holds, the agent says it cannot explain the difference.
 - **Credit requests.** A draft built from the account's data with a fixed template, with the steps for submitting it yourself. The agent submits nothing. Drafts are kept, and what you report about them is stored as your report.
-- **Invoice close.** A Cloudflare Workflow freezes a finished month's usage, totals it per product, reconciles it with the invoice, checks it for anomalies, and waits for your decision. Only the Approve and Reject buttons in the approval card decide; the model cannot. A closed month is final.
 - **Plan comparison.** An estimate of what a month's actual usage would cost on Workers Free and on Workers Paid, from Cloudflare's list prices. It names the free plan's daily limits the usage went over, and what the estimate leaves out.
 - **The assistant's own cost.** A meter of its model usage, a daily budget, and a cost report.
 - **Test mode.** Five fixture accounts the owner can switch to and back. Fixture figures are always labelled, and never mixed with live ones.
@@ -137,33 +138,13 @@ Wrangler is Cloudflare's command-line tool. It is installed with the project's o
 
 When a change to the configuration is meant for everyone, make it in `wrangler.example.jsonc` as well, since that is the file in git and the one CI uses.
 
-## Workflows
-
-The monthly invoice close runs as a [Cloudflare Workflow](https://developers.cloudflare.com/workflows/), a durable, multi-step program that can wait for days and survive restarts.
-
-**You do not create it.** Each environment's Workflow is declared in the `workflows` entry of the Wrangler configuration, and `wrangler deploy` creates it on the first deploy, the same way it creates the agent's Durable Object. Staging and production each get their own (`invoice-close-staging` and `invoice-close`), so they never share a close. Workflows are available on the Workers Free plan.
-
-How a close works:
-
-1. You ask in chat to close a month. Only a month that has ended can be closed; with no month named, it is the last finished one.
-2. The Workflow freezes that month's usage, so later data cannot change the close.
-3. It totals the frozen usage per product and reconciles the total with the invoice.
-4. It runs the same anomaly detectors a bill explanation uses.
-5. It waits for you, for up to seven days. An approval card appears above the chat with the line items, the reconciliation and anything the detectors found.
-6. **Approve** closes the month for good: its figures are final and it cannot be closed again. **Reject**, or no decision in seven days, leaves the month open, and the close can be started again.
-
-Only the buttons in the approval card can approve or reject. The assistant can start a close and tell you its state, but it has no way to approve one, and a reply in which it claims to have done so is withheld.
-
-Each step does its work in the agent's own database and is safe to run twice, so a retried step never writes a second snapshot or closes a month twice. The close's result is kept by the agent, because on the Free plan Cloudflare keeps a finished Workflow instance for only three days.
-
-In test mode a close runs on fixture data, is labelled as such, and closes no real period. Your Workflows and their runs are listed in the Cloudflare dashboard, in the Workflows section.
-
 ## Developing
 
 ```sh
 npm run dev            # local app against the real model; see the note below
 npm run check          # format, lint, type check
 npm run test:coverage  # unit and integration tests with coverage thresholds
+npm run test:e2e       # browser tests against the local app with a scripted model; no model calls
 npm run eval           # whole evaluation suite against the real model; needs `npm run dev` running
 npm run eval -- --changed   # only the cases affected by changes since origin/main
 npm run record         # record the real model's answers for the replay tests; see spec/low-level.md, section 10
@@ -173,7 +154,7 @@ Local development reaches the real model through the production Worker's hostnam
 
 ### Staying inside the free tier
 
-The app runs on Cloudflare's free plan, where Workers AI allows 10,000 neurons a day for the whole account. Each agent instance has a budget in `wrangler.jsonc` (and in the template, `wrangler.example.jsonc`), counted over the trailing 24 hours; together they add up to 8,600, and a test fails if that total is raised past 9,000. Cloudflare documents a reset at 00:00 UTC, but it has refused calls over usage from the previous day, so the app counts the trailing 24 hours to be safe. A chat turn that goes in circles is stopped, and the smoke test, which makes one model turn per run, will not run if it would take the account past 8,000 neurons in the trailing 24 hours.
+The app runs on Cloudflare's free plan, where Workers AI allows 10,000 neurons a day for the whole account. Each agent instance has a budget in `wrangler.jsonc` (and in the template, `wrangler.example.jsonc`), counted over the trailing 24 hours; together they add up to 9,000, and a test fails if that total is raised past it. Cloudflare documents a reset at 00:00 UTC, but it has refused calls over usage from the previous day, so the app counts the trailing 24 hours to be safe. A chat turn that goes in circles is stopped, and the smoke test, which makes one model turn per run, will not run if it would take the account past 8,000 neurons in the trailing 24 hours.
 
 ## Deploying
 
