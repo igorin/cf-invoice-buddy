@@ -101,3 +101,20 @@ One full run of the thirteen cases, on the code with every fix above and with th
 Judged by the new gate, the 19:30 full run still does not pass, and rightly: under the old rule that case stopped after its first, withheld, run, so it has one run on record where the gate needs three. The rerun above gives it three of three with the new instruction. A full run under the new gate, on the code with that instruction, is the release result still owed.
  It could not be made on 2026-10-09: the two full runs and the reruns used about 5,900 of the local smoke instance's 6,900 neurons for 24 hours, and a full run needs about 4,500.
 
+## 2026-10-11: release run, gate passed
+
+One full run of the thirteen cases under the gate as changed that day, on the code with the no-charges instruction.
+
+| Run | Cases | Grounding | Capability | Turns | Neurons | Withheld |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-11 19:45, full | 13 | 7 of 7 | 6 of 6 | 27 | 3,798 | 1 |
+
+**Release gate: passed.**
+
+- Every grounding case had three runs that count. In 20 of the 21 grounding turns the reply was shown and passed every check.
+- One reply was withheld, in the third run of `lower-bill-no-cause`: the response checker stopped it before it was shown. That is 1 reply in 27, 3.7%, against a limit of 10%.
+- All six capability cases passed on their first run.
+- No reply shown to the owner contained a figure, a link or a claim that broke a grounding rule.
+
+This is the release result for phase 9.
+

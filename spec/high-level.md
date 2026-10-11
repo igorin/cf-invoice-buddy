@@ -300,7 +300,7 @@ Recorded on 2026-10-07, after phase 7. Each is owed, or is a rule the build does
 | Requirement | Gap |
 | --- | --- |
 | NFR-T4 | The browser tests run locally, with a scripted model in place of Workers AI, and by hand: they are not part of CI and do not run against staging. |
-| NFR-T5 | Three full evaluation runs have been made. None passed the gate as it stood. In all of them, no reply shown to the owner broke a grounding rule. A full run under the gate as changed on 2026-10-11 is still owed. |
+| NFR-T5 | Met on 2026-10-11, on the fourth full run and under the gate as changed that day. The first three runs did not pass the gate as it then stood. The gate is passed once per release; the model's variation means a later run may need more than one attempt. |
 | NFR-Q1, NFR-Q6 | The linter enforces no `any` and its correctness rules. Rules against non-null assertions, `@ts-` comments, floating promises and `console` are not configured, and `exactOptionalPropertyTypes` is off. |
 | NFR-Q2 | Configuration, tool inputs and external API responses are validated with schemas. Rows read from SQLite are mapped by hand, and workflow parameters are a single id. |
 | NFR-O2 | The time to first visible response is not measured. |

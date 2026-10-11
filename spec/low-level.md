@@ -394,7 +394,7 @@ Before its first turn the runner reads the account's neurons over the trailing 2
 
 Across the whole run, no more than one reply in ten may be withheld. The rules are in `evals/gate.ts`, with unit tests, and the runner prints "Release gate: passed" or "not passed" for a full run.
 
-Three full runs have been made, on 2026-10-07, 2026-10-09 and 2026-10-11, and none passed the gate as it stood then; `evals/RESULTS.md` has each failure and its cause. A full run under the present gate is owed before a release. It costs roughly 3,800 neurons.
+Four full runs have been made. The first three, on 2026-10-07, 2026-10-09 and 2026-10-11, did not pass the gate as it stood then; `evals/RESULTS.md` has each failure and its cause. The fourth, on 2026-10-11 under the present gate, passed: seven of seven grounding cases, six of six capability cases, and one reply of 27 withheld. A full run costs roughly 3,800 neurons.
 
 **Which cases run.** Each case lists the `areas` it depends on (`explain`, `usage`, `docs`, `cost`, `credit`, `plans`). `npm run eval -- --changed [base]` lists the files changed since `base` (default `origin/main`, plus uncommitted files) and `evals/select.ts` maps them to cases:
 
@@ -922,4 +922,4 @@ Each phase is test-first. A phase is done only when `check` and `test:coverage` 
 | 8 | **Plans.** Price table, `comparePlans`, the plan card and the estimate rule in the checker. UC-7. | Done 2026-10-07 |
 | 9 | **Release.** Browser tests, an accessibility pass, price constants re-checked, and a clean run of the whole evaluation suite. | In progress. Done on 2026-10-07: browser tests for six use cases, run locally with a scripted model and not on staging; axe checks in them, which found two faults, both fixed; every price constant re-read from Cloudflare's pages. Still to do: the evaluation run, then the deploy. |
 
-Owed before release, from the phases above: a clean evaluation run, which would also be the first time a credit request, a close or a plan comparison is asked of the real model; recordings of the real model for the replay tests; and the per-record charges of a paid account (section 4).
+Still owed after the release: recordings of the real model for the replay tests; and the per-record charges of a paid account (section 4).
